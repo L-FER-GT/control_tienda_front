@@ -1,0 +1,72 @@
+# Cada push a develop genera un APK firmado y lo envía a los testers por Firebase App Distribution.
+# Secretos necesarios: ver docs/08-credenciales-y-secretos.md
+name: Distribución de pruebas (develop)
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: android-distribute
+  cancel-in-progress: true
+
+jobs:
+  distribuir:
+    name: APK firmado a App Distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: pruebas
+    env:
+      VERSION_NAME: 1.0.${{ github.run_number }}-dev
+      GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      FIREBASE_APP_DISTRIBUTION_GROUPS: ${{ vars.APP_DISTRIBUTION_GROUPS_DEV || 'testers' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verificar secretos
+        run: |
+          missing=""
+          for name in GOOGLE_SERVICES_JSON_BASE64 ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Faltan secretos en el environment 'pruebas':$missing. Ver docs/08-credenciales-y-secretos.md"
+            exit 1
+          fi
+
+      - name: Restaurar google-services.json, keystore y cuenta de servicio
+        run: |
+          echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+          # versionCode creciente y común a develop y master: minutos desde 2020-01-01
+          echo "VERSION_CODE=$(( ($(date +%s) - 1577836800) / 60 ))" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          echo "FIREBASE_SERVICE_ACCOUNT_PATH=$RUNNER_TEMP/firebase-sa.json" >> "$GITHUB_ENV"
+          echo "RELEASE_NOTES=$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Pruebas
+        run: ./gradlew :domain:test :app:testDebugUnitTest
+
+      - name: Compilar y subir a Firebase App Distribution
+        run: ./gradlew :app:assembleRelease :app:appDistributionUploadRelease
+
+      - name: Guardar APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk-dev-${{ env.VERSION_NAME }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14

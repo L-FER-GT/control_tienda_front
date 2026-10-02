@@ -1,0 +1,50 @@
+# Pruebas y compilación en cada Pull Request y en las ramas feature/*.
+# No necesita secretos: usa la configuración "demo" de Firebase (emulador).
+name: Android CI
+
+on:
+  pull_request:
+    branches: [develop, master]
+  push:
+    branches: ["feature/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: Pruebas y build debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Pruebas unitarias (dominio y ViewModels)
+        run: ./gradlew :domain:test :app:testDebugUnitTest --stacktrace
+
+      - name: Compilar APK debug
+        run: ./gradlew :app:assembleDebug
+
+      - name: Reportes de pruebas
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reportes-de-pruebas
+          path: "**/build/reports/tests/"
+          retention-days: 7
+
+      - name: APK debug
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk-debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7

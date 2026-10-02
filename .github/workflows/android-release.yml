@@ -1,0 +1,105 @@
+# master = producción. Genera APK y AAB firmados, los distribuye al grupo de producción de
+# App Distribution (uso interno) y, solo si se habilita, los publica en Google Play (track interno).
+name: Release de producción (master)
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build firmado de producción
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: produccion
+    permissions:
+      contents: write
+    env:
+      VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('1.0.{0}', github.run_number) }}
+      GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+      FIREBASE_APP_DISTRIBUTION_GROUPS: ${{ vars.APP_DISTRIBUTION_GROUPS_PROD || 'produccion' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verificar secretos
+        run: |
+          missing=""
+          for name in GOOGLE_SERVICES_JSON_BASE64 ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Faltan secretos en el environment 'produccion':$missing. Ver docs/08-credenciales-y-secretos.md"
+            exit 1
+          fi
+
+      - name: Restaurar archivos de configuración
+        run: |
+          echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
+          if grep -q '"project_id": *"demo-' app/google-services.json; then
+            echo "::error::google-services.json apunta al proyecto demo: no se puede usar en producción"
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+          # versionCode creciente y común a develop y master: minutos desde 2020-01-01
+          echo "VERSION_CODE=$(( ($(date +%s) - 1577836800) / 60 ))" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          echo "FIREBASE_SERVICE_ACCOUNT_PATH=$RUNNER_TEMP/firebase-sa.json" >> "$GITHUB_ENV"
+          echo "RELEASE_NOTES=Producción $VERSION_NAME: $(git log -1 --pretty=%s)" >> "$GITHUB_ENV"
+          if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "$PLAY_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/play-sa.json"
+            echo "PLAY_SERVICE_ACCOUNT_PATH=$RUNNER_TEMP/play-sa.json" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Pruebas
+        run: ./gradlew :domain:test :app:testDebugUnitTest
+
+      - name: Compilar APK y AAB de release
+        run: ./gradlew :app:assembleRelease :app:bundleRelease
+
+      - name: Distribuir a App Distribution (uso interno)
+        run: ./gradlew :app:appDistributionUploadRelease
+
+      # Preparado para cuando la app se publique: crear la variable PLAY_PUBLISH_ENABLED=true
+      # y el secreto PLAY_SERVICE_ACCOUNT_JSON (ver docs/07-google-play.md).
+      - name: Publicar en Google Play (track interno)
+        if: vars.PLAY_PUBLISH_ENABLED == 'true'
+        run: ./gradlew :app:publishReleaseBundle
+
+      - name: Guardar artefactos
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ env.VERSION_NAME }}
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/mapping/release/mapping.txt
+          retention-days: 90
+
+      - name: Crear GitHub Release (solo tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
+          generate_release_notes: true
