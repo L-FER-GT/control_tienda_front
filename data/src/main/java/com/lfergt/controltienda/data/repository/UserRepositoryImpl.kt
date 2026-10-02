@@ -12,6 +12,7 @@ import com.lfergt.controltienda.data.firebase.toPublicProfile
 import com.lfergt.controltienda.data.firebase.toUserProfile
 import com.lfergt.controltienda.data.media.MediaUploader
 import com.lfergt.controltienda.data.system.CurrentUser
+import com.lfergt.controltienda.data.system.PushTokenStore
 import com.lfergt.controltienda.domain.error.DomainError
 import com.lfergt.controltienda.domain.model.LocalFile
 import com.lfergt.controltienda.domain.model.PublicProfile
@@ -40,6 +41,7 @@ class UserRepositoryImpl @Inject constructor(
     private val uploader: MediaUploader,
     private val currentUser: CurrentUser,
     private val sync: SyncMonitor,
+    private val pushTokens: PushTokenStore,
 ) : UserRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -121,6 +123,7 @@ class UserRepositoryImpl @Inject constructor(
     }
 
     override suspend fun registerDeviceToken(token: String) {
+        pushTokens.token = token
         val uid = auth.currentUser?.uid ?: return
         firestore.document("users/$uid/devices/$token")
             .set(mapOf("token" to token, "platform" to "android", "updatedAt" to FieldValue.serverTimestamp()))

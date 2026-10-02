@@ -8,7 +8,7 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LocalShipping
 import androidx.compose.material.icons.outlined.MoveToInbox
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,7 +38,7 @@ val StoreOption.icon: ImageVector
     get() = when (this) {
         StoreOption.VIEW_PRODUCTS -> Icons.Outlined.Storefront
         StoreOption.CREATE_ORDER -> Icons.Outlined.AddShoppingCart
-        StoreOption.MY_SALES -> Icons.Outlined.ReceiptLong
+        StoreOption.MY_SALES -> Icons.AutoMirrored.Outlined.ReceiptLong
         StoreOption.MANAGE_PRODUCTS -> Icons.Outlined.Inventory2
         StoreOption.CATEGORIES -> Icons.Outlined.Category
         StoreOption.REPORTS -> Icons.Outlined.Assessment

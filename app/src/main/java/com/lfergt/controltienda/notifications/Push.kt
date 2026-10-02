@@ -41,8 +41,14 @@ class PushMessagingService : FirebaseMessagingService() {
     @Inject lateinit var users: UserRepository
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    override fun onNewToken(token: String) {
+    /** FCM 25.1+: el token llega aquí después de FirebaseMessaging.register(). */
+    override fun onRegistered(token: String) {
         scope.launch { runCatching { users.registerDeviceToken(token) } }
+    }
+
+    @Deprecated("FCM 25.1 lo reemplaza por onRegistered; se mantiene por compatibilidad")
+    override fun onNewToken(token: String) {
+        onRegistered(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

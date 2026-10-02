@@ -11,7 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudUpload
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -26,7 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -87,7 +87,7 @@ fun MySalesScreen(onBack: () -> Unit, onDetail: (String) -> Unit, viewModel: MyS
         when {
             !state.loaded -> LoadingBox(Modifier.padding(padding))
             !state.header.access.isStaff -> NoAccess(Modifier.padding(padding))
-            state.orders.isEmpty() -> EmptyState(Icons.Outlined.ReceiptLong, "Aún no tienes ventas", "Tus ventas aparecerán aquí.", Modifier.padding(padding))
+            state.orders.isEmpty() -> EmptyState(Icons.AutoMirrored.Outlined.ReceiptLong, "Aún no tienes ventas", "Tus ventas aparecerán aquí.", Modifier.padding(padding))
             else -> LazyColumn(
                 modifier = Modifier.padding(padding),
                 contentPadding = PaddingValues(16.dp),
