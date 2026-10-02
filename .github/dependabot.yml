@@ -11,6 +11,16 @@ updates:
         patterns: ["androidx.*"]
       firebase:
         patterns: ["com.google.firebase*"]
+    ignore:
+      # AGP: cada versión menor exige una versión mínima de Android Studio
+      # (Studio 2025.3.x soporta hasta AGP 9.2). Se actualiza a mano junto con el IDE.
+      - dependency-name: "com.android*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # Kotlin, KSP y Hilt deben subir juntos (Hilt lee la metadata de Kotlin).
+      - dependency-name: "org.jetbrains.kotlin*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "com.google.devtools.ksp*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: "/"
     target-branch: develop
