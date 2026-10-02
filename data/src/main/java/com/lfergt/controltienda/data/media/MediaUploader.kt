@@ -25,7 +25,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class MediaUploader @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val processor: ImageProcessor,
 ) {
     private val pendingDir: File get() = File(context.filesDir, "pending_uploads").apply { mkdirs() }

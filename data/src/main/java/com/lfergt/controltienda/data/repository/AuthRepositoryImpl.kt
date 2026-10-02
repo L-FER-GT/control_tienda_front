@@ -39,9 +39,15 @@ class AuthRepositoryImpl @Inject constructor(
     private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
 
     override val session: Flow<AuthSession?> = callbackFlow {
-        val listener = FirebaseAuth.IdTokenListener { firebaseAuth ->
-            val user = firebaseAuth.currentUser
-            if (user == null) trySend(null) else launch { trySend(toSession(user, forceRefresh = false)) }
+        val listener = object : FirebaseAuth.IdTokenListener {
+            override fun onIdTokenChanged(firebaseAuth: FirebaseAuth) {
+                val user = firebaseAuth.currentUser
+                if (user == null) {
+                    trySend(null)
+                } else {
+                    launch { trySend(toSession(user, forceRefresh = false)) }
+                }
+            }
         }
         auth.addIdTokenListener(listener)
         awaitClose { auth.removeIdTokenListener(listener) }
@@ -90,6 +96,7 @@ class AuthRepositoryImpl @Inject constructor(
         if (uid != null) {
             runCatching {
                 withTimeoutOrNull(3_000) {
+                    @Suppress("DEPRECATION")
                     val token = messaging.token.await()
                     firestore.document("users/$uid/devices/$token").delete()
                 }
