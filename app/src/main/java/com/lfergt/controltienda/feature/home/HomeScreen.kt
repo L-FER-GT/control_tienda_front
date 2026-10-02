@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -133,7 +134,7 @@ fun HomeScreen(
                 text = { Text("Nueva tienda") },
             )
         },
-        snackbarHost = { SnackbarHost(LocalSnackbar.current) },
+        snackbarHost = { SnackbarHost(LocalSnackbar.current, Modifier.imePadding()) },
     ) { padding ->
         if (state.loading) {
             LoadingBox(Modifier.padding(padding))

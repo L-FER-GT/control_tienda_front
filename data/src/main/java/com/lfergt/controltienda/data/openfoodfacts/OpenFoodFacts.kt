@@ -58,8 +58,10 @@ class OpenFoodFactsLookup @Inject constructor(
     internal fun buildName(product: OffProduct): String? {
         val base = (product.nameEs?.takeIf { it.isNotBlank() } ?: product.name)?.trim()
         if (base.isNullOrEmpty()) return null
-        val brand = product.brands?.split(',')?.firstOrNull()?.trim()?.takeIf {
-            it.isNotEmpty() && !base.contains(it, ignoreCase = true)
+        // La marca solo se agrega si el nombre no la menciona ya ("Coca-Cola" vs "COCA-COLA SERVICES SA/NV").
+        val brand = product.brands?.split(',')?.firstOrNull()?.trim()?.takeIf { candidate ->
+            val words = candidate.lowercase().split(' ', '/').filter { it.length >= 3 }
+            candidate.isNotEmpty() && words.none { base.contains(it, ignoreCase = true) }
         }
         val quantity = product.quantity?.trim()?.takeIf { it.isNotEmpty() && !base.contains(it, ignoreCase = true) }
         return listOfNotNull(base, brand, quantity).joinToString(" ").take(120)

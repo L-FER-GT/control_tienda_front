@@ -1,5 +1,6 @@
 package com.lfergt.controltienda.ui.common
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.ViewModel
@@ -13,6 +14,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+const val TAG = "ControlTienda"
 
 /** ViewModel base: mensajes de una sola vez (snackbar) y ejecución segura de acciones. */
 abstract class BaseViewModel : ViewModel() {
@@ -31,6 +34,7 @@ abstract class BaseViewModel : ViewModel() {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Throwable) {
+                Log.w(TAG, "Acción fallida en ${this@BaseViewModel::class.simpleName}", e)
                 onError(e)
                 message(e.userMessage())
             }
