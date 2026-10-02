@@ -20,7 +20,6 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.lfergt.controltienda.domain.port.AuthRepository
 import com.lfergt.controltienda.domain.port.ConnectivityMonitor
 import com.lfergt.controltienda.domain.port.SyncMonitor
-import com.lfergt.controltienda.domain.port.UserRepository
 import com.lfergt.controltienda.navigation.AppNavHost
 import com.lfergt.controltienda.navigation.HomeRoute
 import com.lfergt.controltienda.navigation.LoginRoute
@@ -36,7 +35,6 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var auth: AuthRepository
-    @Inject lateinit var users: UserRepository
     @Inject lateinit var connectivity: ConnectivityMonitor
     @Inject lateinit var sync: SyncMonitor
 
@@ -88,7 +86,8 @@ class MainActivity : ComponentActivity() {
                     navController.navigate(LoginRoute) { popUpTo(0) { inclusive = true } }
                 }
             } else {
-                runCatching { users.registerDeviceToken(FirebaseMessaging.getInstance().token.await()) }
+                // El token llega a PushMessagingService.onRegistered y se guarda en users/{uid}/devices.
+                runCatching { FirebaseMessaging.getInstance().register().await() }
             }
         }
 

@@ -9,6 +9,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.lfergt.controltienda.data.firebase.firebaseCall
 import com.lfergt.controltienda.data.system.CurrentUser
+import com.lfergt.controltienda.data.system.PushTokenStore
 import com.lfergt.controltienda.domain.error.DomainError
 import com.lfergt.controltienda.domain.model.AuthSession
 import com.lfergt.controltienda.domain.port.AuthRepository
@@ -34,6 +35,7 @@ class AuthRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val messaging: FirebaseMessaging,
     private val currentUser: CurrentUser,
+    private val pushTokens: PushTokenStore,
 ) : AuthRepository {
 
     private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
@@ -92,16 +94,12 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun signOut() {
         val uid = auth.currentUser?.uid
-        // Deja de recibir notificaciones push en este dispositivo.
-        if (uid != null) {
-            runCatching {
-                withTimeoutOrNull(3_000) {
-                    @Suppress("DEPRECATION")
-                    val token = messaging.token.await()
-                    firestore.document("users/$uid/devices/$token").delete()
-                }
-            }
-        }
+        // Deja de recibir notificaciones push en este dispositivo: se borra el token del usuario
+        // y se da de baja el registro de FCM (al volver a entrar se registra de nuevo).
+        val token = pushTokens.token
+        if (uid != null && token != null) firestore.document("users/$uid/devices/$token").delete()
+        pushTokens.token = null
+        runCatching { withTimeoutOrNull(3_000) { messaging.unregister().await() } }
         currentUser.clear()
         auth.signOut()
     }

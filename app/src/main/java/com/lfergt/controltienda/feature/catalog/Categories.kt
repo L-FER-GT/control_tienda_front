@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -20,7 +22,7 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.LabelOff
+import androidx.compose.material.icons.automirrored.outlined.LabelOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -42,7 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -218,7 +220,7 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
                     icon = Icons.Outlined.Add,
                     actions = listOf(
                         FabAction("Todos los productos", Icons.Outlined.Apps) { picker = PickerSource.ALL },
-                        FabAction("Productos sin categoría", Icons.Outlined.LabelOff) { picker = PickerSource.UNCATEGORIZED },
+                        FabAction("Productos sin categoría", Icons.AutoMirrored.Outlined.LabelOff) { picker = PickerSource.UNCATEGORIZED },
                     ),
                 )
             }
@@ -231,9 +233,13 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
             else -> {
                 val products = CategoryRules.productsOf(viewModel.categoryId, state.products)
                 AdaptiveGrid(minCellSize = 150.dp, modifier = Modifier.padding(padding), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 140.dp)) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        category?.let {
-                            StorageImage(it.photoPath, it.name, Modifier.fillMaxWidth().heightIn(max = 160.dp), placeholderIcon = Icons.Outlined.Category)
+                    category?.photoPath?.let { path ->
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            StorageImage(
+                                path,
+                                category.name,
+                                Modifier.fillMaxWidth().aspectRatio(3f).clip(MaterialTheme.shapes.large),
+                            )
                         }
                     }
                     if (products.isEmpty()) {

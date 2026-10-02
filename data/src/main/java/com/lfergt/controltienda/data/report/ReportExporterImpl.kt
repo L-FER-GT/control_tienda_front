@@ -207,6 +207,7 @@ class ReportExporterImpl @Inject constructor(
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 </cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>""",
             )
             put("xl/worksheets/sheet1.xml", sheetXml(table))
