@@ -1,0 +1,20 @@
+# Gradle / Android Studio
+.gradle/
+build/
+/captures
+.externalNativeBuild/
+.cxx/
+.kotlin/
+*.iml
+.idea/
+.DS_Store
+local.properties
+
+# Secretos: NUNCA se versionan (ver docs/08-credenciales-y-secretos.md)
+app/google-services.json
+keystore.properties
+*.jks
+*.keystore
+play-service-account.json
+firebase-service-account.json
+*.p12
