@@ -21,6 +21,11 @@ import com.lfergt.controltienda.feature.orders.CreateOrderScreen
 import com.lfergt.controltienda.feature.orders.MySalesScreen
 import com.lfergt.controltienda.feature.orders.SaleDetailScreen
 import com.lfergt.controltienda.feature.profile.SettingsScreen
+import com.lfergt.controltienda.feature.purchasing.ReceptionEditorScreen
+import com.lfergt.controltienda.feature.purchasing.ReceptionsScreen
+import com.lfergt.controltienda.feature.purchasing.SupplierEditorScreen
+import com.lfergt.controltienda.feature.purchasing.SuppliersScreen
+import com.lfergt.controltienda.feature.stock.StockAlertsScreen
 import com.lfergt.controltienda.feature.store.StoreEditorScreen
 import com.lfergt.controltienda.feature.store.StoreLandingScreen
 
@@ -31,6 +36,9 @@ fun StoreOption.route(storeId: String): Any? = when (this) {
     StoreOption.MY_SALES -> MySalesRoute(storeId)
     StoreOption.MANAGE_PRODUCTS -> ManageProductsRoute(storeId)
     StoreOption.CATEGORIES -> CategoriesRoute(storeId)
+    StoreOption.STOCK_ALERTS -> StockAlertsRoute(storeId)
+    StoreOption.SUPPLIERS -> SuppliersRoute(storeId)
+    StoreOption.RECEPTIONS -> ReceptionsRoute(storeId)
     StoreOption.MEMBERS -> MembersRoute(storeId)
     else -> null
 }
@@ -113,5 +121,21 @@ fun AppNavHost(navController: NavHostController, startDestination: Any) {
             MySalesScreen(onBack = back, onDetail = { navController.navigate(SaleDetailRoute(storeId, it)) })
         }
         composable<SaleDetailRoute> { SaleDetailScreen(onBack = back) }
+
+        // Inventario y compras
+        composable<StockAlertsRoute> { entry ->
+            val storeId = entry.toRoute<StockAlertsRoute>().storeId
+            StockAlertsScreen(onBack = back, onProduct = { navController.navigate(ProductEditorRoute(storeId, it)) })
+        }
+        composable<SuppliersRoute> { entry ->
+            val storeId = entry.toRoute<SuppliersRoute>().storeId
+            SuppliersScreen(onBack = back, onEdit = { navController.navigate(SupplierEditorRoute(storeId, it)) })
+        }
+        composable<SupplierEditorRoute> { SupplierEditorScreen(onBack = back) }
+        composable<ReceptionsRoute> { entry ->
+            val storeId = entry.toRoute<ReceptionsRoute>().storeId
+            ReceptionsScreen(onBack = back, onEdit = { navController.navigate(ReceptionEditorRoute(storeId, it)) })
+        }
+        composable<ReceptionEditorRoute> { ReceptionEditorScreen(onBack = back) }
     }
 }
