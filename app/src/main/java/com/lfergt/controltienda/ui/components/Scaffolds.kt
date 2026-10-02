@@ -1,5 +1,6 @@
 package com.lfergt.controltienda.ui.components
 
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,7 +89,7 @@ fun BackScaffold(
         },
         floatingActionButton = floatingActionButton,
         bottomBar = bottomBar,
-        snackbarHost = { SnackbarHost(LocalSnackbar.current) },
+        snackbarHost = { SnackbarHost(LocalSnackbar.current, Modifier.imePadding()) },
         content = content,
     )
 }

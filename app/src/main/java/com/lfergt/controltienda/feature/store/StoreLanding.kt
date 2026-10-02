@@ -2,6 +2,7 @@ package com.lfergt.controltienda.feature.store
 
 import android.content.res.Configuration
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -129,7 +130,7 @@ fun StoreLandingScreen(
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val compactHeight = LocalConfiguration.current.screenHeightDp < 500
 
-    Scaffold(snackbarHost = { SnackbarHost(LocalSnackbar.current) }, contentWindowInsets = WindowInsets(0)) { _ ->
+    Scaffold(snackbarHost = { SnackbarHost(LocalSnackbar.current, Modifier.imePadding()) }, contentWindowInsets = WindowInsets(0)) { _ ->
         if (!header.loaded) {
             LoadingBox()
             return@Scaffold

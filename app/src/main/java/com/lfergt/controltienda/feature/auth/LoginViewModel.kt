@@ -1,6 +1,8 @@
 package com.lfergt.controltienda.feature.auth
 
+import android.util.Log
 import androidx.lifecycle.viewModelScope
+import com.lfergt.controltienda.ui.common.TAG
 import com.lfergt.controltienda.domain.error.DomainError
 import com.lfergt.controltienda.domain.error.userMessage
 import com.lfergt.controltienda.domain.port.AuthRepository
@@ -94,6 +96,7 @@ class LoginViewModel @Inject constructor(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Throwable) {
+                Log.w(TAG, "No se pudo iniciar sesión", e)
                 if (e is DomainError.Validation && e.field != null) {
                     _state.update { it.copy(fieldErrors = mapOf(e.field!! to e.userMessage())) }
                 } else {

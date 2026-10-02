@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -73,11 +74,12 @@ fun LoginScreen(onLoggedIn: () -> Unit, viewModel: LoginViewModel = hiltViewMode
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showPassword by rememberSaveable { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
 
     CollectMessages(viewModel)
     LaunchedEffect(Unit) { viewModel.loggedIn.collect { onLoggedIn() } }
 
-    Scaffold(snackbarHost = { SnackbarHost(LocalSnackbar.current) }) { padding ->
+    Scaffold(snackbarHost = { SnackbarHost(LocalSnackbar.current, Modifier.imePadding()) }) { padding ->
         Box(
             Modifier
                 .fillMaxSize()
@@ -153,7 +155,7 @@ fun LoginScreen(onLoggedIn: () -> Unit, viewModel: LoginViewModel = hiltViewMode
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Button(
-                    onClick = viewModel::submit,
+                    onClick = { keyboard?.hide(); viewModel.submit() },
                     enabled = !state.loading,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                 ) {

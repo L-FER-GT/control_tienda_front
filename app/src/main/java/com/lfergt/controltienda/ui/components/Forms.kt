@@ -304,7 +304,12 @@ fun ExpandableFab(actions: List<FabAction>, modifier: Modifier = Modifier, icon:
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 actions.forEach { action ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Surface(shape = MaterialTheme.shapes.small, tonalElevation = 3.dp, shadowElevation = 2.dp) {
+                        Surface(
+                            onClick = { expanded = false; action.onClick() },
+                            shape = MaterialTheme.shapes.small,
+                            tonalElevation = 3.dp,
+                            shadowElevation = 2.dp,
+                        ) {
                             Text(action.label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
                         }
                         SmallFloatingActionButton(onClick = { expanded = false; action.onClick() }) {
