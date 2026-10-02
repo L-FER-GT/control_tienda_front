@@ -33,7 +33,7 @@ Flujo recomendado: `feature/*` → Pull Request a `develop` → probar con teste
 | Archivo | Disparador | Secretos |
 |---|---|---|
 | [`android-ci.yml`](../.github/workflows/android-ci.yml) | PR a develop/master, push a `feature/**` | Ninguno |
-| [`android-distribute.yml`](../.github/workflows/android-distribute.yml) | push a `develop` | environment `pruebas` |
+| [`android-distribute.yml`](../.github/workflows/android-distribute.yml) | push a `develop` | environment `pruebas` (si faltan, se omite con un aviso) |
 | [`android-release.yml`](../.github/workflows/android-release.yml) | push a `master`, tags `v*` | environment `produccion` |
 
 ## Configurar los environments
