@@ -7,6 +7,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.lfergt.controltienda.domain.model.StoreOption
 import com.lfergt.controltienda.feature.auth.LoginScreen
+import com.lfergt.controltienda.feature.catalog.CategoriesScreen
+import com.lfergt.controltienda.feature.catalog.CategoryDetailScreen
+import com.lfergt.controltienda.feature.catalog.ManageProductsScreen
+import com.lfergt.controltienda.feature.catalog.ProductEditorScreen
+import com.lfergt.controltienda.feature.catalog.ViewCategoriesScreen
+import com.lfergt.controltienda.feature.catalog.ViewProductsScreen
 import com.lfergt.controltienda.feature.home.HomeScreen
 import com.lfergt.controltienda.feature.master.MasterScreen
 import com.lfergt.controltienda.feature.members.MembersScreen
@@ -17,6 +23,9 @@ import com.lfergt.controltienda.feature.store.StoreLandingScreen
 
 /** Ruta de cada opción del landing de la tienda (null = aún no disponible). */
 fun StoreOption.route(storeId: String): Any? = when (this) {
+    StoreOption.VIEW_PRODUCTS -> ViewCategoriesRoute(storeId)
+    StoreOption.MANAGE_PRODUCTS -> ManageProductsRoute(storeId)
+    StoreOption.CATEGORIES -> CategoriesRoute(storeId)
     StoreOption.MEMBERS -> MembersRoute(storeId)
     else -> null
 }
@@ -65,5 +74,25 @@ fun AppNavHost(navController: NavHostController, startDestination: Any) {
             )
         }
         composable<MembersRoute> { MembersScreen(onBack = back) }
+
+        // Catálogo
+        composable<ViewCategoriesRoute> { entry ->
+            val storeId = entry.toRoute<ViewCategoriesRoute>().storeId
+            ViewCategoriesScreen(onBack = back, onCategory = { navController.navigate(ViewProductsRoute(storeId, it)) })
+        }
+        composable<ViewProductsRoute> { ViewProductsScreen(onBack = back) }
+        composable<ManageProductsRoute> { entry ->
+            val storeId = entry.toRoute<ManageProductsRoute>().storeId
+            ManageProductsScreen(
+                onBack = back,
+                onEdit = { productId, code -> navController.navigate(ProductEditorRoute(storeId, productId, code)) },
+            )
+        }
+        composable<ProductEditorRoute> { ProductEditorScreen(onBack = back) }
+        composable<CategoriesRoute> { entry ->
+            val storeId = entry.toRoute<CategoriesRoute>().storeId
+            CategoriesScreen(onBack = back, onCategory = { navController.navigate(CategoryDetailRoute(storeId, it)) })
+        }
+        composable<CategoryDetailRoute> { CategoryDetailScreen(onBack = back) }
     }
 }
