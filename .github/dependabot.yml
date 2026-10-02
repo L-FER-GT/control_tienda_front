@@ -1,0 +1,18 @@
+# Actualizaciones semanales de dependencias, siempre hacia develop.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      androidx:
+        patterns: ["androidx.*"]
+      firebase:
+        patterns: ["com.google.firebase*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: monthly
