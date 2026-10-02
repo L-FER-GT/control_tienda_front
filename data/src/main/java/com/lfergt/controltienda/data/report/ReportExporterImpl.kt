@@ -29,7 +29,7 @@ import javax.inject.Singleton
 /** Exporta un reporte a PDF o Excel para compartirlo (WhatsApp, correo, etc.). */
 @Singleton
 class ReportExporterImpl @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) : ReportExporter {
 
     private val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("es-PE"))

@@ -27,7 +27,7 @@ const val MAX_FILE_BYTES = 5L * 1024 * 1024
  */
 @Singleton
 class ImageProcessor @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) {
     private val maxSide = 1600
 

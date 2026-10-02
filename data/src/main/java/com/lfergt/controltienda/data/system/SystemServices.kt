@@ -39,7 +39,7 @@ class SyncMonitorImpl @Inject constructor() : SyncMonitor {
 
 @Singleton
 class ConnectivityMonitorImpl @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) : ConnectivityMonitor {
     override val isOnline: Flow<Boolean> = callbackFlow {
         val manager = context.getSystemService(ConnectivityManager::class.java)
