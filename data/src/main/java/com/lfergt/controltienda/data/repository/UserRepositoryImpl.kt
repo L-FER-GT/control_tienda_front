@@ -1,18 +1,17 @@
 package com.lfergt.controltienda.data.repository
 
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Source
-import com.google.firebase.functions.FirebaseFunctions
-import com.lfergt.controltienda.data.firebase.commitOffline
-import com.lfergt.controltienda.data.firebase.firebaseCall
-import com.lfergt.controltienda.data.firebase.observe
-import com.lfergt.controltienda.data.firebase.toPublicProfile
-import com.lfergt.controltienda.data.firebase.toUserProfile
+import com.lfergt.controltienda.data.supabase.SupabaseAuth
+import com.lfergt.controltienda.data.supabase.FieldValue
+import com.lfergt.controltienda.data.supabase.DocumentStore
+import com.lfergt.controltienda.data.supabase.Source
+import com.lfergt.controltienda.data.supabase.RpcClient
+import com.lfergt.controltienda.data.supabase.commitOffline
+import com.lfergt.controltienda.data.supabase.supabaseCall
+import com.lfergt.controltienda.data.supabase.observe
+import com.lfergt.controltienda.data.supabase.toPublicProfile
+import com.lfergt.controltienda.data.supabase.toUserProfile
 import com.lfergt.controltienda.data.media.MediaUploader
 import com.lfergt.controltienda.data.system.CurrentUser
-import com.lfergt.controltienda.data.system.PushTokenStore
 import com.lfergt.controltienda.domain.error.DomainError
 import com.lfergt.controltienda.domain.model.LocalFile
 import com.lfergt.controltienda.domain.model.PublicProfile
@@ -28,26 +27,24 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class UserRepositoryImpl @Inject constructor(
-    private val auth: FirebaseAuth,
+    private val auth: SupabaseAuth,
     private val authRepository: AuthRepository,
-    private val firestore: FirebaseFirestore,
-    private val functions: FirebaseFunctions,
+    private val database: DocumentStore,
+    private val functions: RpcClient,
     private val uploader: MediaUploader,
     private val currentUser: CurrentUser,
     private val sync: SyncMonitor,
-    private val pushTokens: PushTokenStore,
 ) : UserRepository {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeMe(): Flow<UserProfile?> = authRepository.session.flatMapLatest { session ->
         if (session == null) flowOf(null)
-        else firestore.document("users/${session.uid}").observe()
+        else database.document("users/${session.uid}").observe()
             .map { if (it.exists()) it.toUserProfile() else null }
             .onEach { profile -> profile?.let(currentUser::remember) }
             .catch { emit(null) }
@@ -55,11 +52,11 @@ class UserRepositoryImpl @Inject constructor(
 
     override suspend fun ensureProfile(displayName: String?): UserProfile {
         val uid = currentUser.uid()
-        val cached = runCatching { firestore.document("users/$uid").get(Source.CACHE).await() }.getOrNull()
+        val cached = runCatching { database.document("users/$uid").get(Source.CACHE).await() }.getOrNull()
         if (cached != null && cached.exists()) return cached.toUserProfile().also(currentUser::remember)
 
-        val data = firebaseCall {
-            functions.getHttpsCallable("bootstrapUser")
+        val data = supabaseCall {
+            functions.getCallable("bootstrapUser")
                 .call(mapOf("displayName" to (displayName ?: auth.currentUser?.displayName)))
                 .await()
                 .data as? Map<*, *>
@@ -81,9 +78,9 @@ class UserRepositoryImpl @Inject constructor(
         if (name.isEmpty()) throw DomainError.Validation("name", "El nombre es obligatorio")
         val uid = currentUser.uid()
         val now = FieldValue.serverTimestamp()
-        firestore.batch()
-            .update(firestore.document("users/$uid"), mapOf("displayName" to name, "phone" to phone?.trim()?.ifEmpty { null }, "updatedAt" to now))
-            .update(firestore.document("publicProfiles/$uid"), mapOf("displayName" to name, "displayNameLower" to name.lowercase(), "updatedAt" to now))
+        database.batch()
+            .update(database.document("users/$uid"), mapOf("displayName" to name, "phone" to phone?.trim()?.ifEmpty { null }, "updatedAt" to now))
+            .update(database.document("publicProfiles/$uid"), mapOf("displayName" to name, "displayNameLower" to name.lowercase(), "updatedAt" to now))
             .commit()
             .commitOffline(sync)
         currentUser.clear()
@@ -93,25 +90,25 @@ class UserRepositoryImpl @Inject constructor(
         val uid = currentUser.uid()
         val path = uploader.enqueue(photo, "users/$uid")
         val now = FieldValue.serverTimestamp()
-        firestore.batch()
-            .update(firestore.document("users/$uid"), mapOf("photoPath" to path, "updatedAt" to now))
-            .update(firestore.document("publicProfiles/$uid"), mapOf("photoPath" to path, "updatedAt" to now))
+        database.batch()
+            .update(database.document("users/$uid"), mapOf("photoPath" to path, "updatedAt" to now))
+            .update(database.document("publicProfiles/$uid"), mapOf("photoPath" to path, "updatedAt" to now))
             .commit()
             .commitOffline(sync)
         currentUser.clear()
     }
 
-    override suspend fun findByCode(code: String): PublicProfile? = firebaseCall {
+    override suspend fun findByCode(code: String): PublicProfile? = supabaseCall {
         val clean = code.filter(Char::isDigit)
         if (!UserCode.isValid(clean)) throw DomainError.Validation("code", "El código debe tener 10 dígitos")
-        val uid = firestore.document("userCodes/$clean").get().await().getString("uid") ?: return@firebaseCall null
-        firestore.document("publicProfiles/$uid").get().await().takeIf { it.exists() }?.toPublicProfile()
+        val uid = database.document("userCodes/$clean").get().await().getString("uid") ?: return@supabaseCall null
+        database.document("publicProfiles/$uid").get().await().takeIf { it.exists() }?.toPublicProfile()
     }
 
-    override suspend fun searchByName(query: String, limit: Int): List<PublicProfile> = firebaseCall {
+    override suspend fun searchByName(query: String, limit: Int): List<PublicProfile> = supabaseCall {
         val q = query.trim().lowercase()
-        if (q.length < 2) return@firebaseCall emptyList()
-        firestore.collection("publicProfiles")
+        if (q.length < 2) return@supabaseCall emptyList()
+        database.collection("publicProfiles")
             .orderBy("displayNameLower")
             .startAt(q)
             .endAt(q + "")
@@ -122,16 +119,9 @@ class UserRepositoryImpl @Inject constructor(
             .map { it.toPublicProfile() }
     }
 
-    override suspend fun registerDeviceToken(token: String) {
-        pushTokens.token = token
-        val uid = auth.currentUser?.uid ?: return
-        firestore.document("users/$uid/devices/$token")
-            .set(mapOf("token" to token, "platform" to "android", "updatedAt" to FieldValue.serverTimestamp()))
-            .commitOffline(sync)
-    }
 
     override suspend fun deleteAccount() {
-        firebaseCall { functions.getHttpsCallable("deleteAccount").call().await() }
+        supabaseCall { functions.getCallable("deleteAccount").call().await() }
         currentUser.clear()
         auth.signOut()
     }

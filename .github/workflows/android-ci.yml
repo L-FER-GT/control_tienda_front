@@ -1,5 +1,5 @@
 # Pruebas y compilación en cada Pull Request y en las ramas feature/*.
-# No necesita secretos: usa la configuración "demo" de Firebase (emulador).
+# No necesita secretos para compilar y ejecutar las pruebas locales.
 name: Android CI
 
 on:
@@ -29,7 +29,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
 
       - name: Pruebas unitarias (dominio y ViewModels)
-        run: ./gradlew :domain:test :app:testDebugUnitTest --stacktrace
+        run: ./gradlew :domain:test :data:testDebugUnitTest :app:testDebugUnitTest --stacktrace
 
       - name: Compilar APK debug
         run: ./gradlew :app:assembleDebug

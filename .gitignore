@@ -9,6 +9,9 @@ build/
 .idea/
 .DS_Store
 local.properties
+.env
+.env.*
+!.env.example
 
 # Secretos: NUNCA se versionan (ver docs/08-credenciales-y-secretos.md)
 app/google-services.json

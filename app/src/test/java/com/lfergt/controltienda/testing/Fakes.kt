@@ -91,7 +91,6 @@ class FakeUserRepository(private val me: UserProfile = UserProfile("u1", "Ana", 
     override suspend fun updatePhoto(photo: LocalFile) = Unit
     override suspend fun findByCode(code: String): PublicProfile? = null
     override suspend fun searchByName(query: String, limit: Int): List<PublicProfile> = emptyList()
-    override suspend fun registerDeviceToken(token: String) = Unit
     override suspend fun deleteAccount() = Unit
 }
 

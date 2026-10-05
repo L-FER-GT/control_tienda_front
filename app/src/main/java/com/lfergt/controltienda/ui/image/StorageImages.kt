@@ -15,7 +15,7 @@ import com.lfergt.controltienda.data.media.StorageImageResolver
 /** Ruta de un archivo en la "carpeta del servidor", tal como está guardada en la base de datos. */
 data class StoragePath(val path: String)
 
-/** Convierte la ruta en la copia local pendiente de subir o en la URL de Cloud Storage. */
+/** Convierte la ruta en la copia local pendiente o en la URL autenticada de Supabase Storage. */
 class StoragePathMapper(private val resolver: StorageImageResolver) : Mapper<StoragePath, Any> {
     override fun map(data: StoragePath, options: Options): Any = resolver.resolve(data.path)
 }

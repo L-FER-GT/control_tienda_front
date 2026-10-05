@@ -14,9 +14,9 @@ object AppModule {
     @Provides
     @Singleton
     fun dataConfig(): DataConfig = DataConfig(
-        useEmulators = BuildConfig.USE_EMULATORS,
-        emulatorHost = BuildConfig.EMULATOR_HOST,
-        functionsRegion = BuildConfig.FUNCTIONS_REGION,
+        supabaseUrl = BuildConfig.SUPABASE_URL,
+        supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
+        storageBucket = BuildConfig.SUPABASE_STORAGE_BUCKET,
         appVersion = BuildConfig.VERSION_NAME,
     )
 }

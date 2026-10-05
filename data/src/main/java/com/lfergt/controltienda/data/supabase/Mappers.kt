@@ -1,7 +1,5 @@
-package com.lfergt.controltienda.data.firebase
+package com.lfergt.controltienda.data.supabase
 
-import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.DocumentSnapshot.ServerTimestampBehavior
 import com.lfergt.controltienda.domain.model.AppNotification
 import com.lfergt.controltienda.domain.model.Category
 import com.lfergt.controltienda.domain.model.Invitation
@@ -25,12 +23,12 @@ import com.lfergt.controltienda.domain.model.Supplier
 import com.lfergt.controltienda.domain.model.UserProfile
 
 /*
- * Documento de Firestore <-> modelo del dominio.
+ * Documento de PostgreSQL <-> modelo del dominio.
  * Las fechas con serverTimestamp() se leen con ESTIMATE para tener un valor aun sin conexión.
  */
 
 private fun DocumentSnapshot.time(field: String): Long =
-    getTimestamp(field, ServerTimestampBehavior.ESTIMATE).millis()
+    getLong(field) ?: 0L
 
 @Suppress("UNCHECKED_CAST")
 private fun DocumentSnapshot.maps(field: String): List<Map<String, Any?>> =

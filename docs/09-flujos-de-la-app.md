@@ -1,3 +1,5 @@
+> Configuración vigente: [Supabase](03-configurar-supabase.md). Las actualizaciones entre dispositivos se consultan cada 15 segundos; no hay push de fondo.
+
 # 9. Flujos de la app
 
 ## Roles (por tienda)
@@ -23,7 +25,7 @@ Un mismo usuario puede ser administrador de su tienda, empleado en otra y client
 tener "otro administrador" se le dan todos los permisos a un empleado.
 
 El **superadmin** (creador de la app) además ve **Opciones maestras** en el menú del avatar:
-consumo de Firebase frente a las cuotas gratuitas, y habilitar o deshabilitar usuarios y tiendas.
+consumo de Supabase frente a las cuotas gratuitas, y habilitar o deshabilitar usuarios y tiendas.
 
 ## Primer ingreso
 
@@ -31,8 +33,8 @@ consumo de Firebase frente a las cuotas gratuitas, y habilitar o deshabilitar us
 sequenceDiagram
     actor U as Usuario
     participant App
-    participant Auth as Firebase Auth
-    participant Fn as Cloud Functions
+    participant Auth as Supabase Auth
+    participant Fn as RPC PostgreSQL
     U->>App: Correo/contraseña o Google
     App->>Auth: Iniciar sesión
     App->>Fn: bootstrapUser
@@ -54,11 +56,11 @@ sequenceDiagram
 sequenceDiagram
     actor A as Administrador
     actor E as Invitado
-    participant DB as Firestore
-    participant Fn as Cloud Functions
+    participant DB as PostgreSQL
+    participant Fn as RPC PostgreSQL
     A->>DB: Invitación (por código de 10 dígitos o nombre)
-    DB->>Fn: onInvitationCreated
-    Fn->>E: Notificación en la app + push
+    DB->>Fn: Efectos de la transacción ct_commit
+    Fn->>E: Notificación dentro de la app (al actualizar)
     E->>Fn: respondInvitation(aceptar)
     Fn->>DB: Crea la membresía (rol empleado/cliente)
     Fn->>A: "Fulano aceptó unirse a tu tienda"

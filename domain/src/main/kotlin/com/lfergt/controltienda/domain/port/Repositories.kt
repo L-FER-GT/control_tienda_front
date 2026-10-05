@@ -51,7 +51,6 @@ interface UserRepository {
     suspend fun updatePhoto(photo: LocalFile)
     suspend fun findByCode(code: String): PublicProfile?
     suspend fun searchByName(query: String, limit: Int = 20): List<PublicProfile>
-    suspend fun registerDeviceToken(token: String)
     suspend fun deleteAccount()
 }
 

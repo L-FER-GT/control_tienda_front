@@ -1,7 +1,9 @@
+> Configuración vigente: [Supabase](03-configurar-supabase.md). Las actualizaciones entre dispositivos se consultan cada 15 segundos; no hay push de fondo.
+
 # 7. Google Play (preparado, aún no activo)
 
 La app es de uso interno por ahora, pero todo está listo para publicarla cuando se decida.
-El workflow de `master` ya genera el **AAB** firmado y tiene el paso de publicación desactivado
+El workflow de tags `v*` o ejecución manual genera el **AAB** firmado y tiene el paso de publicación desactivado
 hasta que crees la variable `PLAY_PUBLISH_ENABLED=true`.
 
 ## Requisitos de Play que ya cumple la app
@@ -19,8 +21,8 @@ hasta que crees la variable `PLAY_PUBLISH_ENABLED=true`.
    seguridad de los datos (correo, nombre, fotos; datos cifrados en tránsito; el usuario puede
    eliminar su cuenta).
 4. **Primera subida manual** (Play exige que la primera versión se suba a mano): descarga el AAB
-   del artefacto `release-*` del último workflow de `master` y súbelo a **Pruebas → Prueba interna**.
-5. Acepta **Play App Signing** y agrega en Firebase la SHA-1 de la llave de firma de Play
+   del artefacto `release` del último workflow de release y súbelo a **Pruebas → Prueba interna**.
+5. Acepta **Play App Signing** y agrega en el cliente OAuth Android de Google Cloud la SHA-1 de la llave de firma de Play
    (Integridad de la app → Firma de apps), si no, "Continuar con Google" fallará en la versión de Play.
 6. Cuenta de servicio para publicar:
    - Google Cloud Console → crea la cuenta de servicio `github-play-publisher` y una clave JSON.
@@ -29,6 +31,6 @@ hasta que crees la variable `PLAY_PUBLISH_ENABLED=true`.
    - Guarda el JSON en el secreto `PLAY_SERVICE_ACCOUNT_JSON` del environment `produccion`.
 7. Crea la variable `PLAY_PUBLISH_ENABLED` con valor `true`.
 
-Desde entonces, cada push a `master` publica el AAB en la pista **interna** con
+Desde entonces, el workflow de release publica el AAB en la pista **interna** con
 [Gradle Play Publisher](https://github.com/Triple-T/gradle-play-publisher). Para pasar a
 producción, promueve la versión desde Play Console o cambia `track` en `app/build.gradle.kts`.

@@ -1,10 +1,10 @@
 package com.lfergt.controltienda.data.repository
 
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.functions.FirebaseFunctions
-import com.lfergt.controltienda.data.firebase.firebaseCall
-import com.lfergt.controltienda.data.firebase.toPublicProfile
-import com.lfergt.controltienda.data.firebase.toStore
+import com.lfergt.controltienda.data.supabase.DocumentStore
+import com.lfergt.controltienda.data.supabase.RpcClient
+import com.lfergt.controltienda.data.supabase.supabaseCall
+import com.lfergt.controltienda.data.supabase.toPublicProfile
+import com.lfergt.controltienda.data.supabase.toStore
 import com.lfergt.controltienda.domain.model.PublicProfile
 import com.lfergt.controltienda.domain.model.Store
 import com.lfergt.controltienda.domain.model.UsageMetric
@@ -13,20 +13,19 @@ import com.lfergt.controltienda.domain.model.UsageReport
 import com.lfergt.controltienda.domain.model.UserCode
 import com.lfergt.controltienda.domain.port.AdminRepository
 import com.lfergt.controltienda.domain.port.UserRepository
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /** Opciones maestras del superadmin. El servidor vuelve a verificar el claim en cada llamada. */
 @Singleton
 class AdminRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore,
-    private val functions: FirebaseFunctions,
+    private val database: DocumentStore,
+    private val functions: RpcClient,
     private val users: UserRepository,
 ) : AdminRepository {
 
-    override suspend fun getUsage(): UsageReport = firebaseCall {
-        val data = functions.getHttpsCallable("adminGetUsage").call().await().data as? Map<*, *> ?: emptyMap<Any, Any>()
+    override suspend fun getUsage(): UsageReport = supabaseCall {
+        val data = functions.getCallable("adminGetUsage").call().await().data as? Map<*, *> ?: emptyMap<Any, Any>()
         val metrics = (data["metrics"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>().map { m ->
             UsageMetric(
                 key = m["key"] as? String ?: "",
@@ -52,14 +51,14 @@ class AdminRepositoryImpl @Inject constructor(
     }
 
     override suspend fun setUserDisabled(uid: String, disabled: Boolean) {
-        firebaseCall {
-            functions.getHttpsCallable("adminSetUserDisabled").call(mapOf("uid" to uid, "disabled" to disabled)).await()
+        supabaseCall {
+            functions.getCallable("adminSetUserDisabled").call(mapOf("uid" to uid, "disabled" to disabled)).await()
         }
     }
 
-    override suspend fun searchStores(query: String): List<Store> = firebaseCall {
+    override suspend fun searchStores(query: String): List<Store> = supabaseCall {
         val q = query.trim().lowercase()
-        firestore.collection("stores")
+        database.collection("stores")
             .orderBy("nameLower")
             .startAt(q)
             .endAt(q + "")
@@ -71,8 +70,8 @@ class AdminRepositoryImpl @Inject constructor(
     }
 
     override suspend fun setStoreDisabled(storeId: String, disabled: Boolean) {
-        firebaseCall {
-            functions.getHttpsCallable("adminSetStoreDisabled").call(mapOf("storeId" to storeId, "disabled" to disabled)).await()
+        supabaseCall {
+            functions.getCallable("adminSetStoreDisabled").call(mapOf("storeId" to storeId, "disabled" to disabled)).await()
         }
     }
 }

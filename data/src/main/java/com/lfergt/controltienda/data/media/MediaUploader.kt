@@ -17,9 +17,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Cola de subida de archivos a la "carpeta del servidor" (Cloud Storage).
+ * Cola de subida de archivos a la "carpeta del servidor" (Supabase Storage).
  *
- * La ruta definitiva se decide al instante y se guarda en Firestore aunque no haya conexión;
+ * La ruta definitiva se decide al instante y se guarda en PostgreSQL aunque no haya conexión;
  * el archivo queda en una carpeta local y WorkManager lo sube cuando vuelve internet.
  * Mientras tanto la app muestra la copia local (ver [StorageImageResolver]).
  */
@@ -27,6 +27,7 @@ import javax.inject.Singleton
 class MediaUploader @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val processor: ImageProcessor,
+    private val auth: com.lfergt.controltienda.data.supabase.SupabaseAuth,
 ) {
     private val pendingDir: File get() = File(context.filesDir, "pending_uploads").apply { mkdirs() }
 
@@ -54,6 +55,7 @@ class MediaUploader @Inject constructor(
                     UploadWorker.KEY_LOCAL to local.absolutePath,
                     UploadWorker.KEY_REMOTE to remotePath,
                     UploadWorker.KEY_CONTENT_TYPE to contentType,
+                    UploadWorker.KEY_USER to (auth.currentUser?.uid ?: error("Debes iniciar sesión")),
                 ),
             )
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

@@ -1,11 +1,11 @@
 package com.lfergt.controltienda.data.repository
 
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.lfergt.controltienda.data.firebase.commitOffline
-import com.lfergt.controltienda.data.firebase.observe
-import com.lfergt.controltienda.data.firebase.toMembership
-import com.lfergt.controltienda.data.firebase.toStore
+import com.lfergt.controltienda.data.supabase.FieldValue
+import com.lfergt.controltienda.data.supabase.DocumentStore
+import com.lfergt.controltienda.data.supabase.commitOffline
+import com.lfergt.controltienda.data.supabase.observe
+import com.lfergt.controltienda.data.supabase.toMembership
+import com.lfergt.controltienda.data.supabase.toStore
 import com.lfergt.controltienda.data.media.MediaUploader
 import com.lfergt.controltienda.data.system.CurrentUser
 import com.lfergt.controltienda.domain.model.LocalFile
@@ -31,13 +31,13 @@ import javax.inject.Singleton
 
 @Singleton
 class StoreRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore,
+    private val database: DocumentStore,
     private val uploader: MediaUploader,
     private val currentUser: CurrentUser,
     private val sync: SyncMonitor,
 ) : StoreRepository {
 
-    private val stores get() = firestore.collection("stores")
+    private val stores get() = database.collection("stores")
 
     private fun publicStores(): Flow<List<Store>> =
         stores.whereEqualTo("isPublic", true).limit(300).observe()
@@ -45,7 +45,7 @@ class StoreRepositoryImpl @Inject constructor(
             .catch { emit(emptyList()) }
 
     private fun myMemberships(uid: String): Flow<List<Membership>> =
-        firestore.collectionGroup("members").whereEqualTo("uid", uid).observe()
+        database.collectionGroup("members").whereEqualTo("uid", uid).observe()
             .map { snap -> snap.documents.map { it.toMembership() } }
             .catch { emit(emptyList()) }
 
@@ -75,12 +75,12 @@ class StoreRepositoryImpl @Inject constructor(
     }
 
     override fun observeStore(storeId: String): Flow<Store?> =
-        firestore.document("stores/$storeId").observe()
+        database.document("stores/$storeId").observe()
             .map { if (it.exists()) it.toStore() else null }
             .catch { emit(null) }
 
     override fun observeAccess(storeId: String, uid: String): Flow<StoreAccess> {
-        val member = firestore.document("stores/$storeId/members/$uid").observe()
+        val member = database.document("stores/$storeId/members/$uid").observe()
             .map { if (it.exists()) it.toMembership() else null }
             .catch { emit(null) }
         return combine(member, observeStore(storeId)) { m, store ->
@@ -97,7 +97,7 @@ class StoreRepositoryImpl @Inject constructor(
         val ref = stores.document()
         val photoPath = photo?.let { uploader.enqueue(it, "stores/${ref.id}/store") }
         val now = FieldValue.serverTimestamp()
-        firestore.batch()
+        database.batch()
             .set(
                 ref,
                 mapOf(
@@ -143,6 +143,6 @@ class StoreRepositoryImpl @Inject constructor(
             "updatedAt" to FieldValue.serverTimestamp(),
         )
         photo?.let { data["photoPath"] = uploader.enqueue(it, "stores/$storeId/store") }
-        firestore.document("stores/$storeId").update(data).commitOffline(sync)
+        database.document("stores/$storeId").update(data).commitOffline(sync)
     }
 }

@@ -1,54 +1,13 @@
-# 10. Funcionamiento sin conexión y sincronización
+# Sin conexión y sincronización
 
-## Base de datos en la nube + base local
+La caché y la cola residen en supabase_offline.db dentro del almacenamiento privado de Android. Cada fila está asociada a un UID. Las credenciales de sesión se guardan en preferencias privadas; el backup de Android está deshabilitado.
 
-- **Nube:** Cloud Firestore.
-- **Local:** la caché persistente de Firestore en el celular, sin límite de tamaño
-  ([`FirebaseModule.kt`](../data/src/main/java/com/lfergt/controltienda/data/di/FirebaseModule.kt)).
-- Cada documento guarda `updatedAt` (fecha de actualización). Firestore solo descarga lo que
-  cambió desde la última sincronización.
+Las escrituras de tienda, catálogo, ventas, recepciones y perfiles se guardan como lotes locales, con ID UUID estable. La interfaz ve la versión optimista. WorkManager intenta enviarlos al recuperar conexión y las pantallas también sincronizan al observar datos. La confirmación del servidor actualiza la caché y elimina el lote. Ante una respuesta perdida se reenvía el mismo ID: PostgreSQL reconoce el recibo y no repite stock ni correlativos.
 
-## "Entrar a la sala" de la tienda
+Un rechazo definitivo (permisos o validación) elimina la versión optimista de ese lote y muestra un aviso. Los fallos de red o servidor conservan la cola. Los lotes de otra cuenta no se envían con la sesión actual. Al cerrar sesión los pendientes se conservan para cuando la misma cuenta vuelva a entrar.
 
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant L as Landing de la tienda
-    participant C as Caché local
-    participant S as Servidor
-    U->>L: Abre la tienda
-    L->>C: Muestra al instante lo guardado
-    L->>S: Abre listeners de productos y categorías (la "sala")
-    S-->>C: Solo los cambios desde la última vez
-    S-->>L: Cambios en tiempo real mientras siga dentro
-    U->>L: Vuelve a la lista de tiendas
-    L--xS: Cierra los listeners (5 s después)
-```
+Las cargas de archivos llevan el UID de origen. Primero se sincronizan documentos/membresías y luego se suben al bucket privado media. La copia local se conserva hasta confirmar la carga. Los archivos reemplazados se eliminan mediante la tarea de limpieza del backend.
 
-- La actualización se busca **solo al entrar a la tienda**.
-- Solo se reciben cambios de **la tienda en la que se está**: al salir se cierran los listeners.
-- Todas las pantallas de una misma tienda comparten un único listener por colección
-  ([`CatalogRepositoryImpl`](../data/src/main/java/com/lfergt/controltienda/data/repository/CatalogRepositoryImpl.kt)).
+La primera autenticación, aceptar invitaciones, eliminar cuenta y opciones maestras requieren conexión. Los reportes offline solo contienen datos previamente descargados; no implican que esté disponible todo el historial. Sin conexión no se detectan revocaciones nuevas de permisos.
 
-## Escrituras sin conexión
-
-| Acción | Sin conexión | Al reconectar |
-|---|---|---|
-| Crear tienda, producto, categoría, proveedor | ✅ Se guarda local | Se envía al servidor |
-| Crear orden de venta | ✅ Queda "Pendiente" | El servidor asigna el número y descuenta stock |
-| Recepción de mercadería | ✅ | El servidor suma stock y actualiza costos |
-| Fotos y archivos | ✅ Se ven desde la copia local | WorkManager los sube (límite 5 MB, comprimidos) |
-| Aceptar invitación, eliminar cuenta, opciones maestras | ❌ Requiere conexión | — |
-| Reportes | ⚠️ Con lo que haya en la caché | Datos completos con conexión |
-
-Si el servidor rechaza un cambio hecho sin conexión (por ejemplo, el administrador te quitó un
-permiso mientras tanto), la app muestra un aviso y la caché local se corrige sola.
-
-## Archivos ("carpeta del servidor")
-
-- Se guardan en **Cloud Storage** con nombre aleatorio (UUID). Firestore guarda **solo la ruta**,
-  p. ej. `stores/abc/products/9f3c….jpg`.
-- Límite de **5 MB por archivo**, validado en la app y en las reglas de Storage. Las fotos se
-  reducen a 1600 px y se comprimen a JPEG.
-- Las imágenes descargadas quedan en una caché de disco de 250 MB: se siguen viendo sin conexión.
-- Al reemplazar una foto, una Cloud Function borra la anterior para no pagar almacenamiento de más.
+Entre dispositivos se consulta cada 15 segundos mientras la pantalla observa datos. Si no cambió el resultado se recibe solo el etag. No se garantiza actualización instantánea, ni notificaciones push con la app cerrada.

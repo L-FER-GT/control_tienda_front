@@ -164,15 +164,15 @@ private fun UsageTab(state: MasterState) {
     ) {
         item {
             Column(Modifier.widthIn(max = 720.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Cuotas gratuitas del plan Blaze", style = MaterialTheme.typography.titleMedium)
+                Text("Almacenamiento de Supabase Free", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Al llegar al 80 % recibes una alerta (notificación y correo). Actualizado: ${formatDateTime(report.generatedAt)}",
+                    "Estimación de base de datos y archivos. Consulta tráfico y demás cuotas en el panel de Supabase. Actualizado: ${formatDateTime(report.generatedAt)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (report.source == "emulator") {
                     Text(
-                        "Datos de ejemplo: estás usando el emulador de Firebase.",
+                        "Datos de ejemplo: estás usando el emulador de Supabase.",
                         style = MaterialTheme.typography.bodySmall,
                         color = StatusColors.warning,
                     )

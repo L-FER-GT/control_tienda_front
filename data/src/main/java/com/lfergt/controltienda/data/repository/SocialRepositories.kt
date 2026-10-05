@@ -1,15 +1,15 @@
 package com.lfergt.controltienda.data.repository
 
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
-import com.google.firebase.functions.FirebaseFunctions
-import com.lfergt.controltienda.data.firebase.commitOffline
-import com.lfergt.controltienda.data.firebase.firebaseCall
-import com.lfergt.controltienda.data.firebase.observe
-import com.lfergt.controltienda.data.firebase.toInvitation
-import com.lfergt.controltienda.data.firebase.toMembership
-import com.lfergt.controltienda.data.firebase.toNotification
+import com.lfergt.controltienda.data.supabase.FieldValue
+import com.lfergt.controltienda.data.supabase.DocumentStore
+import com.lfergt.controltienda.data.supabase.Query
+import com.lfergt.controltienda.data.supabase.RpcClient
+import com.lfergt.controltienda.data.supabase.commitOffline
+import com.lfergt.controltienda.data.supabase.supabaseCall
+import com.lfergt.controltienda.data.supabase.observe
+import com.lfergt.controltienda.data.supabase.toInvitation
+import com.lfergt.controltienda.data.supabase.toMembership
+import com.lfergt.controltienda.data.supabase.toNotification
 import com.lfergt.controltienda.data.system.CurrentUser
 import com.lfergt.controltienda.domain.model.AppNotification
 import com.lfergt.controltienda.domain.model.Invitation
@@ -29,19 +29,18 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class MemberRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore,
+    private val database: DocumentStore,
     private val currentUser: CurrentUser,
     private val sync: SyncMonitor,
 ) : MemberRepository {
 
     override fun observeMembers(storeId: String): Flow<List<Membership>> =
-        firestore.collection("stores/$storeId/members").observe()
+        database.collection("stores/$storeId/members").observe()
             .map { snap ->
                 snap.documents.map { it.toMembership() }
                     .sortedWith(compareBy<Membership> { it.role != StoreRole.OWNER }.thenBy { it.displayName.lowercase() })
@@ -49,7 +48,7 @@ class MemberRepositoryImpl @Inject constructor(
             .catch { emit(emptyList()) }
 
     override fun observePendingInvitations(storeId: String): Flow<List<Invitation>> =
-        firestore.collection("stores/$storeId/invitations")
+        database.collection("stores/$storeId/invitations")
             .whereEqualTo("status", InvitationStatus.PENDING.key)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .observe()
@@ -59,7 +58,7 @@ class MemberRepositoryImpl @Inject constructor(
     /** Sin conexión también funciona: la función notifica al invitado cuando la invitación llega al servidor. */
     override suspend fun invite(store: Store, target: PublicProfile, role: StoreRole) {
         val me = currentUser.profile()
-        firestore.collection("stores/${store.id}/invitations").document()
+        database.collection("stores/${store.id}/invitations").document()
             .set(
                 mapOf(
                     "storeId" to store.id,
@@ -79,19 +78,19 @@ class MemberRepositoryImpl @Inject constructor(
     }
 
     override suspend fun cancelInvitation(storeId: String, invitationId: String) {
-        firestore.document("stores/$storeId/invitations/$invitationId")
+        database.document("stores/$storeId/invitations/$invitationId")
             .update(mapOf("status" to InvitationStatus.CANCELLED.key, "respondedAt" to FieldValue.serverTimestamp()))
             .commitOffline(sync)
     }
 
     override suspend fun setActive(storeId: String, uid: String, active: Boolean) {
-        firestore.document("stores/$storeId/members/$uid")
+        database.document("stores/$storeId/members/$uid")
             .update(mapOf("active" to active, "updatedAt" to FieldValue.serverTimestamp()))
             .commitOffline(sync)
     }
 
     override suspend fun setPermissions(storeId: String, uid: String, permissions: Set<Permission>) {
-        firestore.document("stores/$storeId/members/$uid")
+        database.document("stores/$storeId/members/$uid")
             .update(mapOf("permissions" to permissions.map { it.key }.sorted(), "updatedAt" to FieldValue.serverTimestamp()))
             .commitOffline(sync)
     }
@@ -99,13 +98,13 @@ class MemberRepositoryImpl @Inject constructor(
 
 @Singleton
 class NotificationRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore,
-    private val functions: FirebaseFunctions,
+    private val database: DocumentStore,
+    private val functions: RpcClient,
     private val auth: AuthRepository,
     private val sync: SyncMonitor,
 ) : NotificationRepository {
 
-    private fun collectionFor(uid: String) = firestore.collection("users/$uid/notifications")
+    private fun collectionFor(uid: String) = database.collection("users/$uid/notifications")
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeNotifications(): Flow<List<AppNotification>> = auth.session.flatMapLatest { session ->
@@ -130,9 +129,9 @@ class NotificationRepositoryImpl @Inject constructor(
 
     override suspend fun markAllRead() {
         val uid = auth.currentSession()?.uid ?: return
-        val unread = firebaseCall { collectionFor(uid).whereEqualTo("read", false).get().await() }
+        val unread = supabaseCall { collectionFor(uid).whereEqualTo("read", false).get().await() }
         if (unread.isEmpty) return
-        val batch = firestore.batch()
+        val batch = database.batch()
         unread.documents.forEach { batch.update(it.reference, "read", true) }
         batch.commit().commitOffline(sync)
     }
@@ -143,8 +142,8 @@ class NotificationRepositoryImpl @Inject constructor(
     }
 
     override suspend fun respondInvitation(storeId: String, invitationId: String, accept: Boolean) {
-        firebaseCall {
-            functions.getHttpsCallable("respondInvitation")
+        supabaseCall {
+            functions.getCallable("respondInvitation")
                 .call(mapOf("storeId" to storeId, "invitationId" to invitationId, "accept" to accept))
                 .await()
         }

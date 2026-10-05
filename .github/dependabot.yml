@@ -9,8 +9,6 @@ updates:
     groups:
       androidx:
         patterns: ["androidx.*"]
-      firebase:
-        patterns: ["com.google.firebase*"]
     ignore:
       # AGP: cada versión menor exige una versión mínima de Android Studio
       # (Studio 2025.3.x soporta hasta AGP 9.2). Se actualiza a mano junto con el IDE.

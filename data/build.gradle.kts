@@ -1,4 +1,4 @@
-// Adaptadores de salida (driven adapters): Firebase, Storage, Open Food Facts,
+// Adaptadores de salida: Supabase, SQLite, Open Food Facts,
 // exportación de reportes, cola de subidas y preferencias locales.
 plugins {
     alias(libs.plugins.android.library)
@@ -20,6 +20,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    testOptions {
+        unitTests.all {
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
+    }
 }
 
 dependencies {
@@ -30,12 +35,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.serialization.json)
 
-    implementation(platform(libs.firebase.bom))
-    api(libs.firebase.auth)
-    api(libs.firebase.firestore)
-    api(libs.firebase.storage)
-    api(libs.firebase.functions)
-    api(libs.firebase.messaging)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -51,4 +50,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("com.squareup.okhttp3:mockwebserver:5.5.0")
 }

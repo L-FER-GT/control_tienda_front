@@ -1,82 +1,30 @@
-# Cada push a develop genera un APK firmado y lo envía a los testers por Firebase App Distribution.
-# Secretos necesarios: ver docs/08-credenciales-y-secretos.md
-# Mientras no estén configurados, el workflow se omite con un aviso (no falla).
-name: Distribución de pruebas (develop)
-
+name: APK demo Supabase
 on:
   push:
     branches: [develop]
   workflow_dispatch:
-
-concurrency:
-  group: android-distribute
-  cancel-in-progress: true
-
+permissions:
+  contents: read
 jobs:
-  distribuir:
-    name: APK firmado a App Distribution
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     environment: pruebas
     env:
-      VERSION_NAME: 1.0.${{ github.run_number }}-dev
-      GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
-      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-      FIREBASE_APP_DISTRIBUTION_GROUPS: ${{ vars.APP_DISTRIBUTION_GROUPS_DEV || 'testers' }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v7
-
-      - name: Verificar secretos
-        id: secretos
-        run: |
-          missing=""
-          for name in GOOGLE_SERVICES_JSON_BASE64 ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON; do
-            [ -z "${!name}" ] && missing="$missing $name"
-          done
-          if [ -n "$missing" ]; then
-            echo "::warning::Distribución omitida: faltan secretos en el environment 'pruebas':$missing. Ver docs/08-credenciales-y-secretos.md"
-            echo "listo=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "listo=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Restaurar google-services.json, keystore y cuenta de servicio
-        if: steps.secretos.outputs.listo == 'true'
-        run: |
-          echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-sa.json"
-          # versionCode creciente y común a develop y master: minutos desde 2020-01-01
-          echo "VERSION_CODE=$(( ($(date +%s) - 1577836800) / 60 ))" >> "$GITHUB_ENV"
-          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-          echo "FIREBASE_SERVICE_ACCOUNT_PATH=$RUNNER_TEMP/firebase-sa.json" >> "$GITHUB_ENV"
-          echo "RELEASE_NOTES=$(git log -1 --pretty=%s) (${GITHUB_SHA::7})" >> "$GITHUB_ENV"
-
       - uses: actions/setup-java@v6
-        if: steps.secretos.outputs.listo == 'true'
         with:
           distribution: temurin
-          java-version: "21"
-
+          java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
-        if: steps.secretos.outputs.listo == 'true'
-
-      - name: Pruebas
-        if: steps.secretos.outputs.listo == 'true'
-        run: ./gradlew :domain:test :app:testDebugUnitTest
-
-      - name: Compilar y subir a Firebase App Distribution
-        if: steps.secretos.outputs.listo == 'true'
-        run: ./gradlew :app:assembleRelease :app:appDistributionUploadRelease
-
-      - name: Guardar APK
-        if: steps.secretos.outputs.listo == 'true'
-        uses: actions/upload-artifact@v7
+      - name: Validar conexión configurada
+        run: test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY"
+      - run: ./gradlew :domain:test :data:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v7
         with:
-          name: apk-dev-${{ env.VERSION_NAME }}
-          path: app/build/outputs/apk/release/*.apk
+          name: apk-demo
+          path: app/build/outputs/apk/debug/*.apk
           retention-days: 14

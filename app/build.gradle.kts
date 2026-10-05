@@ -1,6 +1,5 @@
-import com.google.firebase.appdistribution.gradle.firebaseAppDistribution
-import groovy.json.JsonSlurper
 import java.util.Properties
+import java.util.Base64
 
 plugins {
     alias(libs.plugins.android.application)
@@ -8,38 +7,31 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.firebase.appdistribution)
     alias(libs.plugins.play.publisher)
 }
 
-// ---------------------------------------------------------------------------
-// Configuración de Firebase
-// app/google-services.json NO se versiona (el repo es público). Si no existe,
-// se copia la configuración "demo" que apunta al Firebase Emulator Suite.
-// ---------------------------------------------------------------------------
-val googleServicesFile = file("google-services.json")
-if (!googleServicesFile.exists()) {
-    rootProject.file("config/google-services.demo.json").copyTo(googleServicesFile)
-}
-
-@Suppress("UNCHECKED_CAST")
-val firebaseProjectId: String = run {
-    val json = JsonSlurper().parse(googleServicesFile) as Map<String, Any>
-    (json["project_info"] as Map<String, Any>)["project_id"] as String
-}
-
+// Public client configuration only. Never embed a secret/service-role key.
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-
-fun prop(name: String): String? =
-    localProps.getProperty(name) ?: providers.gradleProperty(name).orNull ?: System.getenv(name.uppercase().replace('.', '_'))
-
-// Los proyectos "demo-*" solo existen en el emulador; con un proyecto real se usa la nube.
-val useEmulators: Boolean = prop("firebase.useEmulators")?.toBoolean() ?: firebaseProjectId.startsWith("demo-")
-val emulatorHost: String = prop("firebase.emulatorHost") ?: "10.0.2.2"
+val envValues = mutableMapOf<String, String>()
+listOf(rootProject.file("../control_tienda_backend/.env"), rootProject.file(".env")).forEach { f ->
+    if (f.exists()) f.readLines().forEach { line ->
+        val clean = line.trim()
+        if (clean.isNotEmpty() && !clean.startsWith("#") && clean.contains("=")) {
+            val (key, value) = clean.split("=", limit = 2)
+            envValues[key.trim()] = value.trim().removeSurrounding("\"").removeSurrounding("'")
+        }
+    }
+}
+fun setting(name: String, fallback: String = ""): String =
+    System.getenv(name) ?: providers.gradleProperty(name).orNull ?: localProps.getProperty(name) ?: envValues[name] ?: fallback
+fun quoted(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+val supabaseKey = setting("SUPABASE_ANON_KEY")
+require(!supabaseKey.startsWith("sb_secret_") && !runCatching {
+    String(Base64.getUrlDecoder().decode(supabaseKey.split('.')[1])).contains("service_role")
+}.getOrDefault(false)) { "Android accepts only SUPABASE_ANON_KEY (anon/publishable), never service_role." }
 
 // Firma de release: keystore.properties (local) o variables de entorno (CI).
 val keystoreProps = Properties().apply {
@@ -61,9 +53,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("boolean", "USE_EMULATORS", useEmulators.toString())
-        buildConfigField("String", "EMULATOR_HOST", "\"$emulatorHost\"")
-        buildConfigField("String", "FUNCTIONS_REGION", "\"us-east1\"")
+        buildConfigField("String", "SUPABASE_URL", quoted(setting("SUPABASE_URL")))
+        buildConfigField("String", "SUPABASE_ANON_KEY", quoted(supabaseKey))
+        buildConfigField("String", "SUPABASE_STORAGE_BUCKET", quoted(setting("SUPABASE_STORAGE_BUCKET", "media")))
+        resValue("string", "default_web_client_id", setting("GOOGLE_WEB_CLIENT_ID"))
     }
 
     signingConfigs {
@@ -88,13 +81,6 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
 
-            // Firebase App Distribution: credenciales desde variable de entorno (ver docs/06).
-            firebaseAppDistribution {
-                artifactType = "APK"
-                groups = System.getenv("FIREBASE_APP_DISTRIBUTION_GROUPS") ?: "testers"
-                releaseNotes = System.getenv("RELEASE_NOTES") ?: "Build interno"
-                System.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")?.let { serviceCredentialsFile = it }
-            }
         }
     }
 
@@ -104,6 +90,7 @@ android {
     }
 
     buildFeatures {
+        resValues = true
         compose = true
         buildConfig = true
     }
@@ -150,7 +137,6 @@ dependencies {
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
 
-    implementation(platform(libs.firebase.bom))
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.googleid)

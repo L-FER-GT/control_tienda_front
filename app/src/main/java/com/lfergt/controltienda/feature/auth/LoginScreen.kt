@@ -196,9 +196,10 @@ fun LoginScreen(onLoggedIn: () -> Unit, viewModel: LoginViewModel = hiltViewMode
 
 /**
  * Inicio de sesión con Google mediante Credential Manager.
- * Devuelve el ID token que luego se intercambia por una sesión de Firebase.
+ * Devuelve el ID token que luego se intercambia por una sesión de Supabase.
  */
 private suspend fun requestGoogleIdToken(context: Context): Result<String> = runCatching {
+    check(context.getString(R.string.default_web_client_id).isNotBlank()) { "El acceso con Google aún no está configurado. Usa correo y contraseña." }
     val option = GetSignInWithGoogleOption.Builder(context.getString(R.string.default_web_client_id)).build()
     val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
     val result = try {

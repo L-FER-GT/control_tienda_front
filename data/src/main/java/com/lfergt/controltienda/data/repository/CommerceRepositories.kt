@@ -1,16 +1,16 @@
 package com.lfergt.controltienda.data.repository
 
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
-import com.lfergt.controltienda.data.firebase.commitOffline
-import com.lfergt.controltienda.data.firebase.firebaseCall
-import com.lfergt.controltienda.data.firebase.observe
-import com.lfergt.controltienda.data.firebase.toMap
-import com.lfergt.controltienda.data.firebase.toOrder
-import com.lfergt.controltienda.data.firebase.toReception
-import com.lfergt.controltienda.data.firebase.toSupplier
-import com.lfergt.controltienda.data.firebase.toTimestamp
+import com.lfergt.controltienda.data.supabase.FieldValue
+import com.lfergt.controltienda.data.supabase.DocumentStore
+import com.lfergt.controltienda.data.supabase.Query
+import com.lfergt.controltienda.data.supabase.commitOffline
+import com.lfergt.controltienda.data.supabase.supabaseCall
+import com.lfergt.controltienda.data.supabase.observe
+import com.lfergt.controltienda.data.supabase.toMap
+import com.lfergt.controltienda.data.supabase.toOrder
+import com.lfergt.controltienda.data.supabase.toReception
+import com.lfergt.controltienda.data.supabase.toSupplier
+import com.lfergt.controltienda.data.supabase.toTimestamp
 import com.lfergt.controltienda.data.media.MediaUploader
 import com.lfergt.controltienda.data.system.CurrentUser
 import com.lfergt.controltienda.domain.error.DomainError
@@ -26,22 +26,21 @@ import com.lfergt.controltienda.domain.port.SyncMonitor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class OrderRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore,
+    private val database: DocumentStore,
     private val currentUser: CurrentUser,
     private val sync: SyncMonitor,
 ) : OrderRepository {
 
-    private fun orders(storeId: String) = firestore.collection("stores/$storeId/orders")
+    private fun orders(storeId: String) = database.collection("stores/$storeId/orders")
 
     /**
      * La venta se guarda al instante en la base local con número null.
-     * Al sincronizar, la función onOrderCreated le asigna el correlativo y descuenta el stock.
+     * Al sincronizar, ct_commit asigna correlativo y descuenta stock en una transacción.
      */
     override suspend fun createOrder(storeId: String, draft: OrderDraft): String {
         val me = currentUser.profile()
@@ -78,7 +77,7 @@ class OrderRepositoryImpl @Inject constructor(
             .map { if (it.exists()) it.toOrder() else null }
             .catch { emit(null) }
 
-    override suspend fun getOrders(storeId: String, fromMillis: Long, toMillis: Long): List<Order> = firebaseCall {
+    override suspend fun getOrders(storeId: String, fromMillis: Long, toMillis: Long): List<Order> = supabaseCall {
         orders(storeId)
             .whereGreaterThanOrEqualTo("createdAt", fromMillis.toTimestamp())
             .whereLessThan("createdAt", toMillis.toTimestamp())
@@ -92,11 +91,11 @@ class OrderRepositoryImpl @Inject constructor(
 
 @Singleton
 class SupplierRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore,
+    private val database: DocumentStore,
     private val sync: SyncMonitor,
 ) : SupplierRepository {
 
-    private fun suppliers(storeId: String) = firestore.collection("stores/$storeId/suppliers")
+    private fun suppliers(storeId: String) = database.collection("stores/$storeId/suppliers")
 
     override fun observeSuppliers(storeId: String): Flow<List<Supplier>> =
         suppliers(storeId).observe()
@@ -129,13 +128,13 @@ class SupplierRepositoryImpl @Inject constructor(
 
 @Singleton
 class ReceptionRepositoryImpl @Inject constructor(
-    private val firestore: FirebaseFirestore,
+    private val database: DocumentStore,
     private val uploader: MediaUploader,
     private val currentUser: CurrentUser,
     private val sync: SyncMonitor,
 ) : ReceptionRepository {
 
-    private fun receptions(storeId: String) = firestore.collection("stores/$storeId/receptions")
+    private fun receptions(storeId: String) = database.collection("stores/$storeId/receptions")
 
     override fun observeReceptions(storeId: String): Flow<List<Reception>> =
         receptions(storeId).orderBy("receivedAt", Query.Direction.DESCENDING).limit(300)
@@ -148,7 +147,7 @@ class ReceptionRepositoryImpl @Inject constructor(
             .map { if (it.exists()) it.toReception() else null }
             .catch { emit(null) }
 
-    /** El stock y el costo de compra los ajusta la función onReceptionWritten (también al editar). */
+    /** ct_commit ajusta stock y costo en PostgreSQL, también al editar. */
     override suspend fun saveReception(storeId: String, draft: ReceptionDraft): String {
         val me = currentUser.profile()
         val newPaths = draft.newPhotos.map { uploader.enqueue(it, "stores/$storeId/receptions") }
@@ -177,7 +176,7 @@ class ReceptionRepositoryImpl @Inject constructor(
         return ref.id
     }
 
-    override suspend fun getReceptions(storeId: String, fromMillis: Long, toMillis: Long): List<Reception> = firebaseCall {
+    override suspend fun getReceptions(storeId: String, fromMillis: Long, toMillis: Long): List<Reception> = supabaseCall {
         receptions(storeId)
             .whereGreaterThanOrEqualTo("receivedAt", fromMillis.toTimestamp())
             .whereLessThan("receivedAt", toMillis.toTimestamp())
