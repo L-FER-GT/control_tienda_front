@@ -7,7 +7,7 @@ nuevo, ofrece descargarlo e instalarlo.
 
 ## Publicar una versión
 
-Ramas: `feature/*` → `develop` (pruebas: genera el APK debug `apk-demo`) → `master` (producción). Solo se
+Ramas: `feature/*` → `develop` (pruebas: genera el APK debug `apk-pruebas`) → `master` (producción). Solo se
 publican versiones desde `master`; el workflow rechaza un tag que no apunte a un commit de `master`.
 
 ```bash

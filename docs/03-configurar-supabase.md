@@ -4,7 +4,7 @@ Aplicar primero las migraciones del backend. En .env: SUPABASE_URL, SUPABASE_ANO
 
 Gradle solo expone esos valores públicos; nunca SUPABASE_SERVICE_ROLE_KEY ni SUPABASE_DB_URL. Recompilar después de cambiarlos.
 
-Auth: habilitar correo/contraseña. Para una demo cerrada sin SMTP, desactivar Confirm email en el panel. Para usuarios con confirmación o recuperación por correo, configurar SMTP propio. Añadir controltienda://auth/callback en Redirect URLs; el enlace de recuperación abre el formulario de nueva contraseña en la app.
+Auth: habilitar correo/contraseña y configurar SMTP propio: la confirmación de cuentas y la recuperación de contraseña dependen del correo, y el emisor incorporado de Supabase solo envía unos pocos mensajes por hora al equipo del proyecto. Mientras no haya SMTP, desactivar Confirm email en el panel (las cuentas no verifican su correo). Añadir controltienda://auth/callback en Redirect URLs; el enlace de recuperación abre el formulario de nueva contraseña en la app.
 
 Google es opcional: habilitar el proveedor en Supabase, configurar los clientes OAuth y firmas Android en Google Cloud y copiar el client ID web a GOOGLE_WEB_CLIENT_ID. Sin esta variable usar correo/contraseña.
 
