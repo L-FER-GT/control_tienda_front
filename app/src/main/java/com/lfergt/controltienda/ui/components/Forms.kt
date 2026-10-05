@@ -1,6 +1,9 @@
 package com.lfergt.controltienda.ui.components
 
 import android.content.Context
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -44,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
 import coil3.compose.AsyncImage
 import com.lfergt.controltienda.domain.model.Money
 import java.io.File
@@ -214,21 +219,39 @@ class PhotoPickerState(
 @Composable
 fun rememberPhotoPicker(onPicked: (Uri) -> Unit): PhotoPickerState {
     val context = LocalContext.current
+    val currentOnPicked by rememberUpdatedState(onPicked)
     var pendingCameraUri by rememberSaveable { mutableStateOf<String?>(null) }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let(onPicked)
+        uri?.let(currentOnPicked)
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val uri = pendingCameraUri
-        if (ok && uri != null) onPicked(Uri.parse(uri))
+        pendingCameraUri = null
+        if (ok && uri != null) currentOnPicked(Uri.parse(uri))
+    }
+    val openCamera = {
+        try {
+            val uri = newCameraUri(context)
+            pendingCameraUri = uri.toString()
+            camera.launch(uri)
+        } catch (_: Exception) {
+            pendingCameraUri = null
+            Toast.makeText(context, "No se pudo abrir la cámara. Puedes elegir una foto de la galería.", Toast.LENGTH_LONG).show()
+        }
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) openCamera()
+        else Toast.makeText(context, "Habilita el permiso de cámara en Ajustes o elige una foto de la galería.", Toast.LENGTH_LONG).show()
     }
     return remember {
         PhotoPickerState(
-            openGallery = { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            openGallery = {
+                try { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                catch (_: Exception) { Toast.makeText(context, "No hay una aplicación disponible para elegir fotos.", Toast.LENGTH_LONG).show() }
+            },
             openCamera = {
-                val uri = newCameraUri(context)
-                pendingCameraUri = uri.toString()
-                camera.launch(uri)
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) openCamera()
+                else permission.launch(Manifest.permission.CAMERA)
             },
         )
     }

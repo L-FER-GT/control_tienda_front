@@ -131,9 +131,9 @@ fun StoreLandingScreen(
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val compactHeight = LocalConfiguration.current.screenHeightDp < 500
 
-    Scaffold(snackbarHost = { SnackbarHost(LocalSnackbar.current, Modifier.imePadding()) }, contentWindowInsets = WindowInsets(0)) { _ ->
+    Scaffold(snackbarHost = { SnackbarHost(LocalSnackbar.current, Modifier.imePadding()) }, contentWindowInsets = WindowInsets(0)) { padding ->
         if (!header.loaded) {
-            LoadingBox()
+            LoadingBox(Modifier.padding(padding))
             return@Scaffold
         }
         val canEdit = header.access.can(Permission.EDIT_STORE)
@@ -171,7 +171,7 @@ fun StoreLandingScreen(
 
         if (landscape && compactHeight) {
             // Celular en horizontal: la cabecera queda anclada a la izquierda y las opciones a la derecha.
-            Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            Row(Modifier.fillMaxSize().padding(padding).windowInsetsPadding(WindowInsets.safeDrawing)) {
                 Column(Modifier.width(300.dp).fillMaxHeight()) {
                     StorePhotoHeader(header, onBack, if (canEdit) onEdit else null, Modifier.weight(1f).fillMaxWidth(), topInset = false)
                     StoreTitle(header)
@@ -179,7 +179,7 @@ fun StoreLandingScreen(
                 body(Modifier.weight(1f).fillMaxHeight())
             }
         } else {
-            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().padding(padding)) {
                 // Foto, nombre y dirección anclados arriba; solo las opciones se desplazan.
                 StorePhotoHeader(header, onBack, if (canEdit) onEdit else null, Modifier.fillMaxWidth().height(if (landscape) 180.dp else 220.dp), topInset = true)
                 StoreTitle(header)

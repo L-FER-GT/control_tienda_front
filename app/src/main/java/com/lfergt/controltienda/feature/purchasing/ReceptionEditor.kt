@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -77,6 +78,7 @@ import com.lfergt.controltienda.feature.catalog.CatalogData
 import com.lfergt.controltienda.feature.catalog.CatalogSource
 import com.lfergt.controltienda.feature.catalog.search
 import com.lfergt.controltienda.feature.scanner.ScanMode
+import com.lfergt.controltienda.feature.scanner.ScannedCode
 import com.lfergt.controltienda.feature.scanner.ScannerDialog
 import com.lfergt.controltienda.navigation.ReceptionEditorRoute
 import com.lfergt.controltienda.ui.common.BaseViewModel
@@ -121,7 +123,7 @@ data class ReceptionForm(
     val keptPhotos: List<String> = emptyList(),
     val newPhotos: List<String> = emptyList(),
     val saving: Boolean = false,
-    val unknownCode: String? = null,
+    val unknownCode: ScannedCode? = null,
 )
 
 @HiltViewModel
@@ -189,19 +191,20 @@ class ReceptionEditorViewModel @Inject constructor(
     fun updateLine(index: Int, line: LineForm) = _form.update { f -> f.copy(lines = f.lines.toMutableList().also { it[index] = line }) }
     fun removeLine(index: Int) = _form.update { f -> f.copy(lines = f.lines.toMutableList().also { it.removeAt(index) }) }
 
-    fun onScanned(code: String) {
-        val product = catalog.value.products.firstOrNull { it.matchesCode(code) }
+    fun onScanned(code: ScannedCode) {
+        val product = catalog.value.products.firstOrNull { it.matchesCode(code.value) }
         if (product != null) addProduct(product) else _form.update { it.copy(unknownCode = code) }
     }
 
     fun dismissUnknown() = _form.update { it.copy(unknownCode = null) }
 
     /** Crea el producto que llegó y aún no estaba registrado (con stock 0: la recepción lo suma). */
-    fun quickCreate(name: String, salePriceCents: Long, costCents: Long?, barcode: String?) = launchSafe {
+    fun quickCreate(name: String, salePriceCents: Long, costCents: Long?, code: ScannedCode) = launchSafe {
         val products = catalog.value.products
         val draft = ProductDraft(
             id = null, name = name, categoryId = null, salePriceCents = salePriceCents, purchaseCostCents = costCents,
-            unit = MeasureUnit.UNIT, stock = 0.0, stockAlert = null, barcode = barcode, qrCode = null,
+            unit = MeasureUnit.UNIT, stock = 0.0, stockAlert = null,
+            barcode = code.value.takeUnless { code.isQr }, qrCode = code.value.takeIf { code.isQr },
         )
         val id = saveProduct(storeId, draft, products, null)
         _form.update {
@@ -262,7 +265,7 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
     val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
     val form by viewModel.form.collectAsStateWithLifecycle()
     var picking by rememberSaveable { mutableStateOf(false) }
-    var scanning by rememberSaveable { mutableStateOf(false) }
+    var scanning by rememberSaveable { mutableStateOf<ScanMode?>(null) }
     var datePicker by rememberSaveable { mutableStateOf(false) }
     var photoSheet by rememberSaveable { mutableStateOf(false) }
     val photoPicker = rememberPhotoPicker { viewModel.addPhoto(it.toString()) }
@@ -298,8 +301,13 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
                         OutlinedButton(onClick = { picking = true }, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Outlined.AddBox, null); Text("  Agregar")
                         }
-                        OutlinedButton(onClick = { scanning = true }, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Outlined.QrCodeScanner, null); Text("  Escanear")
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { scanning = ScanMode.BARCODE }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Outlined.ViewWeek, null); Text("  Barras")
+                        }
+                        OutlinedButton(onClick = { scanning = ScanMode.QR }, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Outlined.QrCodeScanner, null); Text("  QR")
                         }
                     }
                     if (form.lines.isNotEmpty()) {
@@ -345,8 +353,8 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
     if (picking) {
         ProductPicker(catalog.products, currency, onDismiss = { picking = false }, onPick = { viewModel.addProduct(it) })
     }
-    if (scanning) {
-        ScannerDialog(ScanMode.ANY, onResult = { scanning = false; viewModel.onScanned(it.value) }, onDismiss = { scanning = false })
+    scanning?.let { mode ->
+        ScannerDialog(mode, onResult = { scanning = null; viewModel.onScanned(it) }, onDismiss = { scanning = null })
     }
     form.unknownCode?.let { code ->
         QuickProductDialog(code, currency, onDismiss = viewModel::dismissUnknown, onCreate = viewModel::quickCreate)
@@ -424,19 +432,18 @@ private fun ProductPicker(products: List<Product>, currency: String, onDismiss: 
 
 /** Producto que llegó y no estaba registrado: se crea aquí mismo (nombre, precio de venta y costo). */
 @Composable
-private fun QuickProductDialog(code: String, currency: String, onDismiss: () -> Unit, onCreate: (String, Long, Long?, String?) -> Unit) {
+private fun QuickProductDialog(code: ScannedCode, currency: String, onDismiss: () -> Unit, onCreate: (String, Long, Long?, ScannedCode) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
     var cost by rememberSaveable { mutableStateOf("") }
     val priceCents = Money.parseToCents(price)
-    val isBarcode = code.all(Char::isDigit)
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.widthIn(max = 520.dp),
         title = { Text("Producto no registrado") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Código: $code", style = MaterialTheme.typography.bodySmall)
+                Text("${if (code.isQr) "QR" else "Código de barras"}: ${code.value}", style = MaterialTheme.typography.bodySmall)
                 TextInput(name, { name = it }, "Nombre *")
                 MoneyInput(price, { price = it }, "Precio de venta *", currency)
                 MoneyInput(cost, { cost = it }, "Costo de compra", currency)
@@ -444,7 +451,7 @@ private fun QuickProductDialog(code: String, currency: String, onDismiss: () -> 
         },
         confirmButton = {
             TextButton(
-                onClick = { onCreate(name, priceCents!!, Money.parseToCents(cost), if (isBarcode) code else null) },
+                onClick = { onCreate(name, priceCents!!, Money.parseToCents(cost), code) },
                 enabled = name.isNotBlank() && priceCents != null,
             ) { Text("Crear y agregar") }
         },

@@ -206,8 +206,10 @@ private suspend fun requestGoogleIdToken(context: Context): Result<String> = run
         CredentialManager.create(context).getCredential(context, request)
     } catch (e: GetCredentialCancellationException) {
         throw IllegalStateException(null as String?)
+    } catch (e: androidx.credentials.exceptions.NoCredentialException) {
+        throw IllegalStateException("No hay una cuenta de Google disponible. Agrega una en el teléfono o usa correo y contraseña.")
     } catch (e: GetCredentialException) {
-        throw IllegalStateException("No se pudo iniciar sesión con Google. Revisa la configuración (docs/03).")
+        throw IllegalStateException("No se pudo iniciar sesión con Google. Intenta de nuevo o usa correo y contraseña.")
     }
     val credential = result.credential
     if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {

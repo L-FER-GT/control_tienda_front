@@ -51,7 +51,7 @@ class CatalogSource @Inject constructor(
 fun List<Product>.search(query: String): List<Product> {
     val q = query.trim().lowercase()
     if (q.isEmpty()) return this
-    return filter { it.name.lowercase().contains(q) || it.barcode == q || it.qrCode == q }
+    return filter { it.name.lowercase().contains(q) || it.barcode?.contains(q, ignoreCase = true) == true || it.qrCode?.contains(q, ignoreCase = true) == true }
 }
 
 /** Detalle rápido de un producto (al tocarlo en "Ver productos"). */
