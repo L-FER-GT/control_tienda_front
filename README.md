@@ -13,7 +13,7 @@ No se necesita google-services.json, Firebase ni un servidor adicional. El APK n
 
 ## Versiones
 
-Cada tag `vX.Y.Z` publica un APK firmado en [Releases](https://github.com/L-FER-GT/control_tienda_front/releases/latest) y la app instalada ofrece actualizarse a él: `git tag -a v1.0.1 -m "Novedades"` y `git push origin v1.0.1`. Ver [versiones y actualizaciones](docs/11-versiones-y-actualizaciones.md).
+`master` es producción y `develop` pruebas. Cada tag `vX.Y.Z` creado sobre `master` publica un APK firmado en [Releases](https://github.com/L-FER-GT/control_tienda_front/releases/latest) y la app instalada ofrece actualizarse a él: fusionar develop en master, `git tag -a v1.0.1 -m "Novedades"` y `git push origin v1.0.1`. Ver [versiones y actualizaciones](docs/11-versiones-y-actualizaciones.md).
 
 [Configuración](docs/03-configurar-supabase.md) · [Arquitectura](docs/02-arquitectura.md) · [Offline](docs/10-funcionamiento-offline.md) · [CI](docs/05-ci-cd.md) · [Versiones](docs/11-versiones-y-actualizaciones.md) · [Firma](docs/04-firma-de-la-app.md)
 

@@ -7,10 +7,19 @@ nuevo, ofrece descargarlo e instalarlo.
 
 ## Publicar una versión
 
+Ramas: `feature/*` → `develop` (pruebas: genera el APK debug `apk-demo`) → `master` (producción). Solo se
+publican versiones desde `master`; el workflow rechaza un tag que no apunte a un commit de `master`.
+
 ```bash
-git checkout develop && git pull
+# 1. Llevar a master lo probado en develop (o con un pull request develop → master en GitHub)
+git checkout master && git pull
+git merge --no-ff develop -m "Release v1.0.1"
+git push origin master
+
+# 2. Crear la versión sobre master
 git tag -a v1.0.1 -m "Corrige el total de ventas y agrega el reporte por categoría"
 git push origin v1.0.1
+git checkout develop
 ```
 
 - El mensaje del tag son las **notas** que verán los usuarios en el aviso de actualización.
