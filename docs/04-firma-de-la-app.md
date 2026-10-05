@@ -3,7 +3,11 @@
 Las versiones `release` deben firmarse siempre con **la misma** llave. Si la pierdes, no podrás
 actualizar la app instalada en los celulares (habría que desinstalar) ni en Google Play.
 
-## Crear la llave (una sola vez)
+La llave actual ya existe: `C:\dev\control_tienda\firma\control-tienda-release.jks` (alias `control-tienda`),
+fuera de los dos repositorios, con sus contraseñas en `keystore.properties`. Haz una copia de ambos archivos
+en un lugar seguro (gestor de contraseñas, USB cifrado); no se pueden recuperar.
+
+## Crear la llave (solo si se empieza de cero)
 
 ```bash
 keytool -genkeypair -v \

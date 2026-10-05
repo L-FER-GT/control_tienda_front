@@ -2,9 +2,12 @@
 
 # 7. Google Play (preparado, aún no activo)
 
-La app es de uso interno por ahora, pero todo está listo para publicarla cuando se decida.
-El workflow de tags `v*` o ejecución manual genera el **AAB** firmado y tiene el paso de publicación desactivado
-hasta que crees la variable `PLAY_PUBLISH_ENABLED=true`.
+La app se distribuye por [GitHub Releases](11-versiones-y-actualizaciones.md) y se actualiza sola desde ahí.
+Play prohíbe que una app se actualice por fuera de Play y restringe `REQUEST_INSTALL_PACKAGES`, por eso el
+workflow de tags ya no genera el AAB. Para publicar en Play: crear una variante sin el actualizador
+(`UPDATE_REPO` vacío y sin ese permiso en el manifest), generar el AAB con `:app:bundleRelease` y seguir los
+pasos de abajo; la publicación automática requiere además `PLAY_PUBLISH_ENABLED=true` y un paso
+`./gradlew :app:publishReleaseBundle` en un workflow.
 
 ## Requisitos de Play que ya cumple la app
 

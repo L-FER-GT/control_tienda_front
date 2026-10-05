@@ -55,6 +55,9 @@ import com.lfergt.controltienda.domain.model.LocalFile
 import com.lfergt.controltienda.domain.model.UserCode
 import com.lfergt.controltienda.domain.model.UserProfile
 import com.lfergt.controltienda.domain.port.UserRepository
+import com.lfergt.controltienda.feature.update.UpdateDialogs
+import com.lfergt.controltienda.feature.update.UpdateState
+import com.lfergt.controltienda.feature.update.UpdateViewModel
 import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.CollectMessages
 import com.lfergt.controltienda.ui.components.Avatar
@@ -117,13 +120,19 @@ class SettingsViewModel @Inject constructor(
 }
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+    updater: UpdateViewModel = hiltViewModel(),
+) {
     val me by viewModel.me.collectAsStateWithLifecycle()
     val form by viewModel.form.collectAsStateWithLifecycle()
+    val updateState by updater.state.collectAsStateWithLifecycle()
     var photoSheet by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val picker = rememberPhotoPicker { viewModel.updatePhoto(it.toString()) }
     CollectMessages(viewModel)
+    CollectMessages(updater)
 
     BackScaffold(title = "Configuración", onBack = onBack) { padding ->
         val profile = me
@@ -151,6 +160,15 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
                 Button(onClick = viewModel::save, enabled = !form.saving, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                     Text("Guardar cambios")
                 }
+                if (updater.enabled) {
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    Text("Aplicación", style = MaterialTheme.typography.titleMedium)
+                    OutlinedButton(
+                        onClick = updater::check,
+                        enabled = updateState == UpdateState.Idle,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (updateState == UpdateState.Checking) "Buscando…" else "Buscar actualizaciones") }
+                }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text("Zona de peligro", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
                 Text(
@@ -174,6 +192,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
         }
     }
 
+    UpdateDialogs(updater)
     if (photoSheet) PhotoSourceSheet(onDismiss = { photoSheet = false }, picker = picker)
     if (confirmDelete) DeleteAccountDialog(onDismiss = { confirmDelete = false }, onConfirm = { confirmDelete = false; viewModel.deleteAccount() })
 }

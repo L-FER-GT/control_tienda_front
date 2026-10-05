@@ -1,23 +1,26 @@
-name: Release Android Supabase
+# Publica un APK firmado en GitHub Releases al subir un tag vX.Y.Z (ver docs/11-versiones-y-actualizaciones.md).
+# La app instalada consulta el último release y ofrece descargarlo e instalarlo.
+name: Release Android
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: android-release
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     environment: produccion
     env:
-      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -25,26 +28,28 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
-      - name: Preparar firma
+      - name: Versión y firma
         run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v([0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,2})$ ]] || { echo "El tag debe ser vX.Y.Z, por ejemplo v1.2.0"; exit 1; }
+          echo "VERSION_NAME=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
           for name in SUPABASE_URL SUPABASE_ANON_KEY ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            test -n "${!name}" || { echo "Falta $name"; exit 1; }
+            test -n "${!name}" || { echo "Falta el secret $name (Settings > Secrets and variables > Actions)"; exit 1; }
           done
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$(( ($(date +%s) - 1577836800) / 60 ))" >> "$GITHUB_ENV"
-          if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
-            printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/play-sa.json"
-            echo "PLAY_SERVICE_ACCOUNT_PATH=$RUNNER_TEMP/play-sa.json" >> "$GITHUB_ENV"
-          fi
-      - run: ./gradlew :domain:test :data:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease :app:bundleRelease
-      - name: Publicar en Play (opcional)
-        if: vars.PLAY_PUBLISH_ENABLED == 'true'
-        run: ./gradlew :app:publishReleaseBundle
-      - uses: actions/upload-artifact@v7
+      - run: ./gradlew :domain:test :data:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease
+      - name: Publicar en GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk="control-tienda-$GITHUB_REF_NAME.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          # Las notas son el mensaje del tag (git tag -a vX.Y.Z -m "..."); la app las muestra al ofrecer la versión.
+          git fetch --force --no-tags origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" "$apk" --verify-tag --title "Control Tienda $GITHUB_REF_NAME" --notes-file notes.md
+      - name: Mapping de R8 (para leer errores de la versión publicada)
+        uses: actions/upload-artifact@v7
         with:
-          name: release
-          path: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
-            app/build/outputs/mapping/release/mapping.txt
+          name: mapping-${{ github.ref_name }}
+          path: app/build/outputs/mapping/release/mapping.txt

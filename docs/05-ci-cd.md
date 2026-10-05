@@ -2,6 +2,6 @@
 
 Android CI ejecuta tests de dominio, datos (incluida persistencia offline) y ViewModels, y genera APK debug. Puede compilar sin credenciales; ese APK requiere recompilar con configuración para conectarse.
 
-Configurar SUPABASE_URL y SUPABASE_ANON_KEY como variables del environment pruebas/produccion. GOOGLE_WEB_CLIENT_ID es opcional. El workflow de develop guarda APK como artefacto de GitHub Actions. No utiliza Firebase App Distribution.
+Configurar en GitHub (Settings → Secrets and variables → Actions → **Secrets**) SUPABASE_URL y SUPABASE_ANON_KEY, y los cuatro ANDROID_KEY* de la [firma](04-firma-de-la-app.md). GOOGLE_WEB_CLIENT_ID es opcional y va en **Variables**. El workflow de develop guarda APK debug como artefacto de GitHub Actions.
 
-Release conserva firma mediante ANDROID_KEYSTORE_* y publicación opcional de Google Play con PLAY_SERVICE_ACCOUNT_JSON y PLAY_PUBLISH_ENABLED. No colocar secretos de Supabase en el APK.
+Release Android se ejecuta al subir un tag vX.Y.Z: prueba, compila el APK firmado y lo publica en GitHub Releases, de donde la app instalada toma las actualizaciones ([versiones](11-versiones-y-actualizaciones.md)). No colocar secretos de Supabase en el APK: solo la URL y la clave anon/publishable.

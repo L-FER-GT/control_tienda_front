@@ -15,7 +15,11 @@ import com.lfergt.controltienda.data.repository.SupplierRepositoryImpl
 import com.lfergt.controltienda.data.repository.UserRepositoryImpl
 import com.lfergt.controltienda.data.system.ConnectivityMonitorImpl
 import com.lfergt.controltienda.data.system.SyncMonitorImpl
+import com.lfergt.controltienda.data.update.GitHubApi
+import com.lfergt.controltienda.data.update.GitHubHttp
+import com.lfergt.controltienda.data.update.GitHubUpdates
 import com.lfergt.controltienda.domain.port.AdminRepository
+import com.lfergt.controltienda.domain.port.AppUpdates
 import com.lfergt.controltienda.domain.port.AuthRepository
 import com.lfergt.controltienda.domain.port.CatalogRepository
 import com.lfergt.controltienda.domain.port.Clock
@@ -61,6 +65,7 @@ abstract class RepositoryModule {
     @Binds abstract fun exporter(impl: ReportExporterImpl): ReportExporter
     @Binds abstract fun connectivity(impl: ConnectivityMonitorImpl): ConnectivityMonitor
     @Binds abstract fun sync(impl: SyncMonitorImpl): SyncMonitor
+    @Binds abstract fun updates(impl: GitHubUpdates): AppUpdates
 }
 
 @Module
@@ -93,5 +98,29 @@ object NetworkModule {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(OpenFoodFactsApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @GitHubHttp
+    fun gitHubHttp(config: DataConfig): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        // GitHub rechaza las peticiones sin User-Agent.
+        .addInterceptor { chain ->
+            chain.proceed(chain.request().newBuilder().header("User-Agent", "ControlTienda/${config.appVersion}").build())
+        }
+        .build()
+
+    @Provides
+    @Singleton
+    fun gitHubApi(@GitHubHttp client: OkHttpClient): GitHubApi {
+        val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+        return Retrofit.Builder()
+            .baseUrl("https://api.github.com/")
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(GitHubApi::class.java)
     }
 }

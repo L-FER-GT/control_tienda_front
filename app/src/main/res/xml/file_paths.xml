@@ -4,4 +4,6 @@
     <cache-path name="camera" path="camera/" />
     <!-- Reportes exportados (PDF / Excel) para compartir -->
     <cache-path name="reports" path="reports/" />
+    <!-- Instalador de la versión nueva descargada de GitHub Releases -->
+    <cache-path name="updates" path="updates/" />
 </paths>

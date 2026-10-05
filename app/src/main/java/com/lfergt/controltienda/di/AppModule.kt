@@ -18,5 +18,7 @@ object AppModule {
         supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
         storageBucket = BuildConfig.SUPABASE_STORAGE_BUCKET,
         appVersion = BuildConfig.VERSION_NAME,
+        appVersionCode = BuildConfig.VERSION_CODE,
+        updateRepo = BuildConfig.UPDATE_REPO,
     )
 }

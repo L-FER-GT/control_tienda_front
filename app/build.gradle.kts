@@ -40,6 +40,13 @@ val keystoreProps = Properties().apply {
 }
 val releaseStoreFile: String? = keystoreProps.getProperty("storeFile") ?: System.getenv("ANDROID_KEYSTORE_PATH")
 
+// Versión = tag vX.Y.Z del release (el workflow pasa VERSION_NAME). versionCode usa la misma fórmula
+// que AppVersion en el dominio, así la app compara su versión con la del último release de GitHub.
+val appVersionName = setting("VERSION_NAME", "0.0.0")
+val appVersionCode = Regex("""(\d{1,4})\.(\d{1,2})\.(\d{1,2})""").matchEntire(appVersionName)?.destructured
+    ?.let { (major, minor, patch) -> major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt() }
+    ?: error("VERSION_NAME debe ser X.Y.Z con minor y patch entre 0 y 99, no '$appVersionName'.")
+
 android {
     namespace = "com.lfergt.controltienda"
     compileSdk = 37
@@ -48,8 +55,8 @@ android {
         applicationId = "com.lfergt.controltienda"
         minSdk = 26
         targetSdk = 37
-        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = System.getenv("VERSION_NAME") ?: "1.0.0"
+        versionCode = appVersionCode.coerceAtLeast(1)
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -57,6 +64,8 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", quoted(supabaseKey))
         buildConfigField("String", "SUPABASE_STORAGE_BUCKET", quoted(setting("SUPABASE_STORAGE_BUCKET", "media")))
         resValue("string", "default_web_client_id", setting("GOOGLE_WEB_CLIENT_ID"))
+        // Repositorio público cuyos releases ofrece la app como actualización; vacío = desactivado.
+        buildConfigField("String", "UPDATE_REPO", quoted(""))
     }
 
     signingConfigs {
@@ -80,7 +89,8 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
-
+            // Solo el release busca actualizaciones: debug es otra app (.debug) con otra firma.
+            buildConfigField("String", "UPDATE_REPO", quoted(setting("UPDATE_REPO", "L-FER-GT/control_tienda_front")))
         }
     }
 

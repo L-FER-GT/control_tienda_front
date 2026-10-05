@@ -1,7 +1,9 @@
 package com.lfergt.controltienda.domain.port
 
+import com.lfergt.controltienda.domain.model.AppUpdate
 import com.lfergt.controltienda.domain.model.ExportFormat
 import com.lfergt.controltienda.domain.model.ExportedFile
+import com.lfergt.controltienda.domain.model.LocalFile
 import com.lfergt.controltienda.domain.model.ReportTable
 import kotlinx.coroutines.flow.Flow
 
@@ -26,6 +28,18 @@ interface ConnectivityMonitor {
 interface SyncMonitor {
     val failures: Flow<String>
     fun report(error: Throwable)
+}
+
+/** Versiones de la app publicadas fuera de una tienda de apps (Releases de GitHub). */
+interface AppUpdates {
+    /** false en compilaciones sin canal de publicación (debug o locales). */
+    val enabled: Boolean
+
+    /** La última versión publicada si es posterior a la instalada; null si ya está al día. */
+    suspend fun findNewer(): AppUpdate?
+
+    /** Descarga y verifica el instalador; el archivo queda listo para el instalador del sistema. */
+    suspend fun download(update: AppUpdate, onProgress: (Float) -> Unit): LocalFile
 }
 
 /** Reloj inyectable para poder probar la lógica que depende de la hora. */

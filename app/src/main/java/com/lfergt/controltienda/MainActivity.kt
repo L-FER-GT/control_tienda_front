@@ -25,11 +25,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import com.lfergt.controltienda.domain.port.AuthRepository
 import com.lfergt.controltienda.domain.port.ConnectivityMonitor
 import com.lfergt.controltienda.domain.port.SyncMonitor
+import com.lfergt.controltienda.feature.update.UpdateDialogs
+import com.lfergt.controltienda.feature.update.UpdateViewModel
 import com.lfergt.controltienda.navigation.AppNavHost
 import com.lfergt.controltienda.navigation.HomeRoute
 import com.lfergt.controltienda.navigation.LoginRoute
@@ -114,6 +117,10 @@ class MainActivity : ComponentActivity() {
         }
         LaunchedEffect(Unit) { sync.failures.collect { snackbar.showSnackbar(it) } }
 
+        // Al abrir la app se consulta el último release de GitHub (solo en el build release).
+        val updater: UpdateViewModel = hiltViewModel()
+        LaunchedEffect(Unit) { updater.checkOnStart() }
+
         // Si la sesión se cierra (o se deshabilita la cuenta), vuelve al login.
         LaunchedEffect(session?.uid) {
             val uid = session?.uid
@@ -133,6 +140,7 @@ class MainActivity : ComponentActivity() {
 
         CompositionLocalProvider(LocalSnackbar provides snackbar, LocalOffline provides !online) {
             AppNavHost(navController = navController, startDestination = start)
+            UpdateDialogs(updater)
         }
     }
 
