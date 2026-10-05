@@ -1,4 +1,4 @@
-name: APK demo Supabase
+name: APK de pruebas (develop)
 on:
   push:
     branches: [develop]
@@ -25,6 +25,6 @@ jobs:
       - run: ./gradlew :domain:test :data:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
       - uses: actions/upload-artifact@v7
         with:
-          name: apk-demo
+          name: apk-pruebas
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 14

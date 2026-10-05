@@ -1,4 +1,8 @@
+<img src="app/src/main/ic_launcher-playstore.png" alt="Control Tienda" width="96" align="right">
+
 # Control Tienda Android — Supabase
+
+[Descargar la última versión](https://github.com/L-FER-GT/control_tienda_front/releases/latest)
 
 App Kotlin/Compose con dominio independiente, adaptadores Supabase y caché/cola SQLite offline. Requiere el backend hermano control_tienda_backend con sus migraciones aplicadas.
 
