@@ -45,6 +45,18 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun `el mismo producto admite QR y barras con el mismo contenido`() {
+        assertTrue(ProductValidator.validate(draft(barcode = "AB-123", qr = "AB-123"), emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `los espacios no permiten duplicar el codigo de otro producto`() {
+        val existing = listOf(product("a", barcode = "AB-123"))
+        assertTrue(ProductValidator.validate(draft(barcode = " AB-123 "), existing).containsKey(ProductValidator.FIELD_BARCODE))
+        assertTrue(ProductValidator.validate(draft(qr = " AB-123 "), existing).containsKey(ProductValidator.FIELD_QR))
+    }
+
+    @Test
     fun `nombre obligatorio y alerta requiere stock`() {
         val errors = ProductValidator.validate(draft(name = " ", alert = 3.0), emptyList())
         assertTrue(errors.containsKey(ProductValidator.FIELD_NAME))

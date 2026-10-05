@@ -18,3 +18,5 @@ No se necesita google-services.json, Firebase ni un servidor adicional. El APK n
 [Configuración](docs/03-configurar-supabase.md) · [Arquitectura](docs/02-arquitectura.md) · [Offline](docs/10-funcionamiento-offline.md) · [CI](docs/05-ci-cd.md) · [Versiones](docs/11-versiones-y-actualizaciones.md) · [Firma](docs/04-firma-de-la-app.md)
 
 Notificaciones e invitaciones dentro de la app; no push cuando está cerrada. Actualización entre dispositivos mediante consultas condicionales cada 15 segundos mientras se observa la pantalla. La primera conexión y login requieren internet.
+
+[Revisión del escáner y Supabase](docs/12-revision-escaner-y-supabase.md): correcciones de QR/barras, caché, permisos de cámara, validación y pendientes para publicar la actualización.

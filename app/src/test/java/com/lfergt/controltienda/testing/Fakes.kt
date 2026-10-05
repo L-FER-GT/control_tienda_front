@@ -63,13 +63,17 @@ class FakeStoreRepository(
 class FakeCatalogRepository(products: List<Product> = emptyList(), categories: List<Category> = emptyList()) : CatalogRepository {
     val products = MutableStateFlow(products)
     val categories = MutableStateFlow(categories)
+    val savedProducts = mutableListOf<ProductDraft>()
     override fun observeCategories(storeId: String): Flow<List<Category>> = categories
     override fun observeProducts(storeId: String): Flow<List<Product>> = products
     override fun observePriceHistory(storeId: String, productId: String): Flow<List<PriceHistoryEntry>> = flowOf(emptyList())
     override suspend fun saveCategory(storeId: String, categoryId: String?, name: String, photo: LocalFile?): String = "c"
     override suspend fun deleteCategory(storeId: String, categoryId: String) = Unit
     override suspend fun assignCategory(storeId: String, productIds: List<String>, categoryId: String?) = Unit
-    override suspend fun saveProduct(storeId: String, draft: ProductDraft, photo: LocalFile?): String = "p"
+    override suspend fun saveProduct(storeId: String, draft: ProductDraft, photo: LocalFile?): String {
+        savedProducts += draft
+        return "p"
+    }
     override suspend fun deleteProduct(storeId: String, productId: String) = Unit
 }
 

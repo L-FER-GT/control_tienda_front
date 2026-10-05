@@ -46,12 +46,11 @@ object ProductValidator {
             put(FIELD_STOCK_ALERT, "Para usar la alerta, el producto debe tener stock")
         }
         val others = existing.filter { it.id != draft.id }
-        draft.barcode?.takeIf { it.isNotBlank() }?.let { code ->
+        draft.barcode?.trim()?.takeIf { it.isNotBlank() }?.let { code ->
             others.firstOrNull { it.matchesCode(code) }?.let { put(FIELD_BARCODE, "El código ya pertenece a \"${it.name}\"") }
         }
-        draft.qrCode?.takeIf { it.isNotBlank() }?.let { code ->
+        draft.qrCode?.trim()?.takeIf { it.isNotBlank() }?.let { code ->
             others.firstOrNull { it.matchesCode(code) }?.let { put(FIELD_QR, "El QR ya pertenece a \"${it.name}\"") }
-            if (code == draft.barcode) put(FIELD_QR, "El QR no puede ser igual al código de barras")
         }
     }
 }

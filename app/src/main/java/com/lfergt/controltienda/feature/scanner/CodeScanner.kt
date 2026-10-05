@@ -1,11 +1,17 @@
 package com.lfergt.controltienda.feature.scanner
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Rect
+import android.net.Uri
+import android.provider.Settings
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.CameraSelector
+import androidx.camera.view.CameraController
 import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
@@ -30,10 +36,12 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -55,10 +63,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.Lifecycle
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
 /** Qué códigos lee el escáner. Funciona sin internet (modelo de ML Kit incluido en la app). */
@@ -67,6 +76,7 @@ enum class ScanMode(val formats: IntArray) {
         intArrayOf(
             Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E,
             Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39, Barcode.FORMAT_ITF,
+            Barcode.FORMAT_CODE_93, Barcode.FORMAT_CODABAR,
         ),
     ),
     QR(intArrayOf(Barcode.FORMAT_QR_CODE)),
@@ -76,8 +86,8 @@ enum class ScanMode(val formats: IntArray) {
 data class ScannedCode(val value: String, val isQr: Boolean)
 
 /**
- * Vista de cámara con un cuadro marcado donde se enfoca el código. Solo acepta códigos cuyo centro
- * esté dentro del cuadro. [belowFrame] se dibuja debajo del cuadro, dejando un margen.
+ * El cuadro guía el enfoque. También acepta un único código fuera del cuadro.
+ * [belowFrame] se dibuja debajo del cuadro, dejando un margen.
  */
 @Composable
 fun CodeScanner(
@@ -92,6 +102,9 @@ fun CodeScanner(
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
     LaunchedEffect(Unit) { if (!granted) launcher.launch(Manifest.permission.CAMERA) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
 
     if (!granted) {
         Box(modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
@@ -99,11 +112,15 @@ fun CodeScanner(
                 Icon(Icons.Outlined.NoPhotography, null, tint = Color.White)
                 Text("Se necesita permiso de cámara para escanear", color = Color.White, textAlign = TextAlign.Center)
                 Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) { Text("Dar permiso") }
+                TextButton(onClick = {
+                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+                }) { Text("Abrir ajustes de permisos", color = Color.White) }
             }
         }
         return
     }
-    CameraWithFrame(mode, onDetected, modifier, belowFrame)
+    var attempt by remember { mutableStateOf(0) }
+    key(attempt) { CameraWithFrame(mode, onDetected, modifier, belowFrame, onRetry = { attempt++ }) }
 }
 
 @Composable
@@ -112,44 +129,89 @@ private fun CameraWithFrame(
     onDetected: (ScannedCode) -> Unit,
     modifier: Modifier,
     belowFrame: @Composable () -> Unit,
+    onRetry: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val density = LocalDensity.current
     val currentOnDetected by rememberUpdatedState(onDetected)
     val frameRect = remember { AtomicReference<Rect?>(null) }
-    val controller = remember { LifecycleCameraController(context) }
-    val executor = remember { Executors.newSingleThreadExecutor() }
+    val controllerResult = remember { runCatching { LifecycleCameraController(context.applicationContext) } }
+    val cameraController = controllerResult.getOrNull()
+    val preview = remember { PreviewView(context).apply {
+        scaleType = PreviewView.ScaleType.FILL_CENTER
+        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+    } }
+    val executor = remember(context) { ContextCompat.getMainExecutor(context) }
+    var cameraError by remember { mutableStateOf<String?>(null) }
+    var ready by remember { mutableStateOf(false) }
     var torch by remember { mutableStateOf(false) }
 
-    DisposableEffect(mode) {
-        val scanner = BarcodeScanning.getClient(
-            BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(mode.formats.first(), *mode.formats.drop(1).toIntArray())
-                .build(),
-        )
-        controller.imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
-        controller.setImageAnalysisAnalyzer(
-            executor,
-            MlKitAnalyzer(listOf(scanner), ImageAnalysis.COORDINATE_SYSTEM_VIEW_REFERENCED, executor) { result ->
-                val frame = frameRect.get() ?: return@MlKitAnalyzer
-                val code = result.getValue(scanner)?.firstOrNull { barcode ->
-                    val box = barcode.boundingBox ?: return@firstOrNull false
-                    frame.contains(box.centerX(), box.centerY()) && !barcode.rawValue.isNullOrBlank()
-                } ?: return@MlKitAnalyzer
-                val value = code.rawValue!!.trim()
-                ContextCompat.getMainExecutor(context).execute {
-                    currentOnDetected(ScannedCode(value, code.format == Barcode.FORMAT_QR_CODE))
+    DisposableEffect(mode, lifecycleOwner, cameraController) {
+        // All callbacks run on the main executor; closing the dialog cannot shut it down
+        // while ML Kit is still delivering a frame.
+        var active = true
+        var scanner: com.google.mlkit.vision.barcode.BarcodeScanner? = null
+        fun failed(error: Throwable) {
+            Log.e("CodeScanner", "No se pudo iniciar la cámara", error)
+            ready = false
+            cameraError = "No se pudo abrir la cámara. Cierra otras apps que la estén usando y vuelve a intentar."
+        }
+        if (cameraController == null) {
+            failed(controllerResult.exceptionOrNull() ?: IllegalStateException("Cámara no disponible"))
+        } else {
+            val initialization = cameraController.initializationFuture
+            initialization.addListener({
+                if (!active) return@addListener
+                try {
+                    initialization.get()
+                    cameraController.setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
+                    cameraController.cameraSelector = when {
+                        cameraController.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) -> CameraSelector.DEFAULT_BACK_CAMERA
+                        cameraController.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) -> CameraSelector.DEFAULT_FRONT_CAMERA
+                        else -> throw IllegalStateException("Este dispositivo no tiene cámara disponible")
+                    }
+                    val detector = BarcodeScanning.getClient(BarcodeScannerOptions.Builder()
+                        .setBarcodeFormats(mode.formats.first(), *mode.formats.drop(1).toIntArray()).build())
+                    scanner = detector
+                    cameraController.imageAnalysisBackpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+                    cameraController.setImageAnalysisAnalyzer(executor,
+                        MlKitAnalyzer(listOf(detector), ImageAnalysis.COORDINATE_SYSTEM_VIEW_REFERENCED, executor) { result ->
+                            if (!active) return@MlKitAnalyzer
+                            val codes = result.getValue(detector).orEmpty().filter { !it.rawValue.isNullOrBlank() }
+                            val frame = frameRect.get()
+                            val code = codes.firstOrNull { barcode ->
+                                val box = barcode.boundingBox
+                                frame != null && box != null && frame.contains(box.centerX(), box.centerY())
+                            } ?: codes.singleOrNull() ?: return@MlKitAnalyzer
+                            currentOnDetected(ScannedCode(code.rawValue!!.trim(), code.format == Barcode.FORMAT_QR_CODE))
+                        })
+                    preview.controller = cameraController
+                    cameraController.bindToLifecycle(lifecycleOwner)
+                    ready = true
+                } catch (error: Exception) {
+                    failed(error)
                 }
-            },
-        )
-        controller.bindToLifecycle(lifecycleOwner)
+            }, executor)
+        }
         onDispose {
-            controller.clearImageAnalysisAnalyzer()
-            scanner.close()
+            active = false
+            runCatching { cameraController?.clearImageAnalysisAnalyzer() }
+            runCatching { preview.controller = null }
+            runCatching { cameraController?.unbind() }
+            scanner?.close()
         }
     }
-    DisposableEffect(Unit) { onDispose { executor.shutdown() } }
+
+    cameraError?.let { error ->
+        Box(modifier.fillMaxSize().background(Color.Black).padding(32.dp), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(error, color = Color.White, textAlign = TextAlign.Center)
+                Button(onClick = onRetry) { Text("Reintentar cámara") }
+            }
+        }
+        return
+    }
 
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
         val isQr = mode == ScanMode.QR
@@ -158,7 +220,7 @@ private fun CameraWithFrame(
         val frameTop = ((maxHeight - frameHeight) / 2 - 56.dp).coerceAtLeast(24.dp)
         val frameLeft = (maxWidth - frameWidth) / 2
 
-        LaunchedEffect(frameWidth, frameHeight, frameTop) {
+        LaunchedEffect(frameWidth, frameHeight, frameTop, frameLeft, density) {
             with(density) {
                 frameRect.set(
                     Rect(
@@ -172,12 +234,7 @@ private fun CameraWithFrame(
         }
 
         AndroidView(
-            factory = { ctx ->
-                PreviewView(ctx).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
-                    this.controller = controller
-                }
-            },
+            factory = { preview },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -207,7 +264,15 @@ private fun CameraWithFrame(
         ) { belowFrame() }
 
         FilledTonalIconButton(
-            onClick = { torch = !torch; controller.enableTorch(torch) },
+            enabled = ready && cameraController?.cameraInfo?.hasFlashUnit() == true,
+            onClick = {
+                val desired = !torch
+                runCatching { cameraController?.enableTorch(desired) }.getOrNull()?.let { future ->
+                    future.addListener({
+                        runCatching { future.get() }.onSuccess { torch = desired }
+                    }, executor)
+                }
+            },
             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(12.dp),
         ) {
             Icon(if (torch) Icons.Outlined.FlashlightOff else Icons.Outlined.FlashlightOn, contentDescription = "Linterna")

@@ -20,6 +20,46 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk=[35], manifest=Config.NONE)
 class OfflineStoreTest {
+    @Test fun `filtered and limited queries preserve other cached rows and reconcile moved or revoked rows`() = runBlocking {
+        val context = RuntimeEnvironment.getApplication() as Context
+        context.getSharedPreferences("supabase_session", Context.MODE_PRIVATE).edit().putString("uid", "filter-user")
+            .putString("access", "access").putString("refresh", "refresh").putLong("expires", Long.MAX_VALUE).commit()
+        val server = MockWebServer().apply { start() }
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher())
+        val sync = object : SyncMonitor {
+            override val failures: Flow<String> = emptyFlow()
+            override fun report(error: Throwable) = Unit
+        }
+        try {
+            val store = DocumentStore(context, SupabaseAuth(context, DataConfig(server.url("/").toString(), "public", appVersion = "test")), sync, scope)
+            val all = store.collection("stores/shop/products")
+            server.enqueue(MockResponse().setBody("""{"etag":"v1","rows":[
+                {"path":"stores/shop/products/a","data":{"name":"Arroz","category":"food"}},
+                {"path":"stores/shop/products/b","data":{"name":"Jabón","category":"cleaning"}}
+            ]}"""))
+            store.refresh(all)
+            server.enqueue(MockResponse().setBody("""{"etag":"filtered","rows":[{"path":"stores/shop/products/a","data":{"name":"Arroz","category":"food"}}]}"""))
+            store.refresh(all.whereEqualTo("category", "food"))
+            assertEquals(2, store.cached(all).size())
+            server.enqueue(MockResponse().setResponseCode(503).setBody("{\"message\":\"temporarily unavailable\"}"))
+            assertEquals(2, all.get().await().size())
+            // A row no longer in the filter still exists in a different category.
+            server.enqueue(MockResponse().setBody("""{"etag":"moved","rows":[]}"""))
+            server.enqueue(MockResponse().setBody("""[{"path":"stores/shop/products/a","data":{"name":"Arroz","category":"other"}}]"""))
+            store.refresh(all.whereEqualTo("category", "food"))
+            assertTrue(store.cached(all.whereEqualTo("category", "food")).isEmpty)
+            assertEquals(2, store.cached(all).size())
+            server.enqueue(MockResponse().setBody("""{"etag":"limited","rows":[{"path":"stores/shop/products/a","data":{"name":"Arroz","category":"other"}}]}"""))
+            store.refresh(all.orderBy("name").limit(1))
+            assertEquals(2, store.cached(all).size())
+            // RLS hides a previously visible row: do not retain it offline.
+            server.enqueue(MockResponse().setBody("""{"etag":"revoked","rows":[]}"""))
+            server.enqueue(MockResponse().setBody("[]"))
+            store.refresh(all.whereEqualTo("category", "cleaning"))
+            assertEquals(listOf("a"), store.cached(all).documents.map { it.id })
+        } finally { scope.cancel(); server.shutdown() }
+    }
+
     @Test fun `durable outbox preserves offline writes retries and rolls back rejected batches per user`() = runBlocking {
         val context=RuntimeEnvironment.getApplication() as Context
         val server=MockWebServer();server.start()

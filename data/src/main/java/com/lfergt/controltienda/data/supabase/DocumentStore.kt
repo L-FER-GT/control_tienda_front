@@ -157,14 +157,32 @@ class DocumentStore @Inject constructor(
         }
         if (auth.currentUser?.uid != user) return@withContext
         val db=local.writableDatabase
+        val cachedRows = db.rawQuery("SELECT path,data FROM documents WHERE uid=?", arrayOf(user)).use { c ->
+            buildList {
+                while (c.moveToNext()) if (query.inScope(c.getString(0))) {
+                    add(DocumentSnapshot(document(c.getString(0)), parse(c.getString(1)), false))
+                }
+            }
+        }
+        val returned = rows.map { it.getString("path") }.toSet()
+        val constrained = query.spec.keys.any { it in setOf("filters", "limit", "start", "end") }
+        val missing = (if (constrained) query.select(cachedRows) else cachedRows)
+            .filter { it.reference.path !in returned }
+        val remove = mutableListOf<String>()
+        for (row in missing) {
+            if (constrained) {
+                // Absence from a filtered/limited result does not mean deletion: the row may
+                // have changed category or moved beyond the limit. Revalidate it individually.
+                val current = JSONArray(auth.request("/rest/v1/rpc/ct_query",
+                    data = mapOf("query" to mapOf("document" to row.reference.path)), expectedUid = user))
+                if (current.length() > 0) { rows += current.getJSONObject(0); continue }
+            }
+            remove += row.reference.path
+        }
+        if (auth.currentUser?.uid != user) return@withContext
         db.beginTransaction()
         try {
-            // Remove cached rows from this scope, including data whose permission was revoked.
-            db.rawQuery("SELECT path,data FROM documents WHERE uid=?",arrayOf(user)).use { c ->
-                val remove=mutableListOf<String>()
-                while(c.moveToNext()) if(query.inScope(c.getString(0))) remove+=c.getString(0)
-                remove.forEach { db.delete("documents","uid=? AND path=?",arrayOf(user,it)) }
-            }
+            remove.forEach { db.delete("documents","uid=? AND path=?",arrayOf(user,it)) }
             rows.forEach { put(db,user,it.getString("path"),it.getJSONObject("data").toString()) }
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
@@ -189,6 +207,7 @@ class DocumentStore @Inject constructor(
         if(source != Source.CACHE) {
             try { flush(); refresh(query) }
             catch (e: IOException) { /* available cached data remains usable offline */ }
+            catch (e: ApiException) { if (!e.retryable) throw e }
         }
         return cached(query)
     }
@@ -223,9 +242,13 @@ open class Query(internal val store: DocumentStore, internal val spec: Map<Strin
         val order=spec["order"] as? String
         if(order!=null) {
             result=result.filter { (spec["start"]==null || compare(it.get(order),spec["start"])>=0) && (spec["end"]==null || compare(it.get(order),spec["end"])<=0) }
-                .sortedWith { a,b -> compare(a.get(order),b.get(order)) }
-            if(spec["descending"]==true) result=result.reversed()
-        }
+                .sortedWith { a,b ->
+                    val compared = compare(a.get(order),b.get(order))
+                    if (compared != 0) {
+                        if (spec["descending"] == true) -compared else compared
+                    } else a.reference.path.compareTo(b.reference.path)
+                }
+        } else result = result.sortedBy { it.reference.path }
         return result.take((spec["limit"] as? Number)?.toInt() ?: Int.MAX_VALUE)
     }
     private fun compare(a:Any?,b:Any?):Int = if(a is Number && b is Number) a.toDouble().compareTo(b.toDouble()) else (a?.toString() ?: "").compareTo(b?.toString() ?: "")

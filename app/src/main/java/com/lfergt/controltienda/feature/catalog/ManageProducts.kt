@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +58,7 @@ fun ManageProductsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
-    var scanning by rememberSaveable { mutableStateOf(false) }
+    var scanning by rememberSaveable { mutableStateOf<ScanMode?>(null) }
     val allowed = state.header.access.can(Permission.MANAGE_PRODUCTS)
 
     BackScaffold(
@@ -68,7 +69,8 @@ fun ManageProductsScreen(
                 ExpandableFab(
                     icon = Icons.Outlined.Add,
                     actions = listOf(
-                        FabAction("Escanear código", Icons.Outlined.QrCodeScanner) { scanning = true },
+                        FabAction("Escanear código de barras", Icons.Outlined.ViewWeek) { scanning = ScanMode.BARCODE },
+                        FabAction("Escanear QR", Icons.Outlined.QrCodeScanner) { scanning = ScanMode.QR },
                         FabAction("Nuevo producto", Icons.Outlined.Add) { onEdit(null, null) },
                     ),
                 )
@@ -105,12 +107,12 @@ fun ManageProductsScreen(
         }
     }
 
-    if (scanning) {
+    scanning?.let { mode ->
         ScannerDialog(
-            mode = ScanMode.ANY,
-            onDismiss = { scanning = false },
+            mode = mode,
+            onDismiss = { scanning = null },
             onResult = { code ->
-                scanning = false
+                scanning = null
                 val existing = state.products.firstOrNull { it.matchesCode(code.value) }
                 if (existing != null) onEdit(existing.id, null)
                 else onEdit(null, (if (code.isQr) "qr:" else "bar:") + code.value)
