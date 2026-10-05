@@ -44,8 +44,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -97,11 +99,13 @@ fun LoginScreen(onLoggedIn: () -> Unit, viewModel: LoginViewModel = hiltViewMode
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primary) {
+                // Mismo logo y fondo que el ícono de la app; se amplía porque la capa del ícono
+                // reserva márgenes para las máscaras del launcher.
+                Surface(shape = RoundedCornerShape(28.dp), color = colorResource(R.color.logo_background)) {
                     Image(
-                        painterResource(R.drawable.ic_launcher_foreground),
+                        painterResource(R.mipmap.ic_launcher_foreground),
                         contentDescription = null,
-                        modifier = Modifier.size(96.dp),
+                        modifier = Modifier.size(96.dp).scale(1.4f),
                     )
                 }
                 Text("Control Tienda", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)

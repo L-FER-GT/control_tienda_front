@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand_primary">#0F6E56</color>
-    <color name="brand_on_primary">#FFFFFF</color>
+    <!-- Azul del logo: fondo del ícono adaptativo, del splash y del logo en el login. -->
+    <color name="logo_background">#004BE4</color>
 </resources>
