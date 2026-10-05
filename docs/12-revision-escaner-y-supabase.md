@@ -2,6 +2,17 @@
 
 Cambios preparados sobre la versión ya publicada, conservando la configuración y el sistema de actualizaciones.
 
+## Causa del cierre al escanear (confirmada en emulador)
+
+Solo fallaba el APK **release** (el publicado en GitHub); el debug no se minifica. ML Kit crea sus
+`ComponentRegistrar` por reflexión con el constructor vacío, y R8 en modo completo lo eliminaba
+(`NoSuchMethodException: …BarcodeRegistrar.<init>`). Sin registrars, `BarcodeScanning.getClient()`
+lanzaba `NullPointerException`: en v1.0.0 la app se cerraba al conceder la cámara; con los cambios de
+abajo ya no se cerraba, pero mostraba "No se pudo abrir la cámara". La regla de `app/proguard-rules.pro`
+conserva esos constructores. Verificado con el APK release: barras y QR abren la cámara, se cierran y
+reabren sin errores, y el código ingresado llega al campo correcto. Para revisar un cierre de un APK
+publicado, desofuscar el logcat con el `mapping.txt` del artefacto `mapping-vX.Y.Z` del workflow.
+
 ## Correcciones
 
 - Gestionar productos y recepción tienen acciones separadas para QR y código de barras. El editor de producto y ventas ya tenían ambas opciones.
