@@ -74,7 +74,9 @@ android {
                 storeFile = rootProject.file(releaseStoreFile)
                 storePassword = keystoreProps.getProperty("storePassword") ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
                 keyAlias = keystoreProps.getProperty("keyAlias") ?: System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword = keystoreProps.getProperty("keyPassword") ?: System.getenv("ANDROID_KEY_PASSWORD")
+                // En un keystore PKCS12 la llave usa la misma contraseña: ANDROID_KEY_PASSWORD es opcional.
+                keyPassword = keystoreProps.getProperty("keyPassword")
+                    ?: System.getenv("ANDROID_KEY_PASSWORD")?.takeIf { it.isNotEmpty() } ?: storePassword
             }
         }
     }

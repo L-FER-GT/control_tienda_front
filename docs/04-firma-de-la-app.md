@@ -50,9 +50,9 @@ base64 -w0 control-tienda-release.jks
 | Secreto | Valor |
 |---|---|
 | `ANDROID_KEYSTORE_BASE64` | El texto base64 del `.jks` |
-| `ANDROID_KEYSTORE_PASSWORD` | Contraseña del keystore |
+| `ANDROID_KEYSTORE_PASSWORD` | Contraseña del keystore (`storePassword` de `keystore.properties`) |
 | `ANDROID_KEY_ALIAS` | `control-tienda` |
-| `ANDROID_KEY_PASSWORD` | Contraseña de la llave |
+| `ANDROID_KEY_PASSWORD` | Opcional: solo si la llave tiene otra contraseña (no ocurre en keystores PKCS12) |
 
 El workflow lo decodifica en un archivo temporal y lo pasa a Gradle por variables de entorno
 (ver [`app/build.gradle.kts`](../app/build.gradle.kts)).
