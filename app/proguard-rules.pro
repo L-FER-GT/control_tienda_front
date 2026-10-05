@@ -15,3 +15,9 @@
 -keepattributes Signature, Exceptions
 -keep,allowobfuscation,allowshrinking interface retrofit2.Call
 -keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
+
+# ML Kit (escáner): ComponentDiscovery crea los registrars por reflexión con su constructor vacío.
+# La regla de la librería conserva la clase pero no el constructor, y R8 en modo completo lo borra:
+# sin registrars, BarcodeScanning.getClient() lanza NullPointerException en el build release
+# (la v1.0.0 se cerraba al abrir el escáner).
+-keep class * implements com.google.firebase.components.ComponentRegistrar { void <init>(); }

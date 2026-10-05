@@ -42,6 +42,13 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
       - run: ./gradlew :domain:test :data:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease
+      - name: Verificar el escáner en el build minificado
+        # Sin estos constructores ML Kit no se inicializa y el escáner falla solo en release (v1.0.0).
+        run: |
+          for c in com.google.mlkit.common.internal.CommonComponentRegistrar com.google.mlkit.vision.common.internal.VisionCommonRegistrar com.google.mlkit.vision.barcode.internal.BarcodeRegistrar; do
+            awk -v c="$c" '$0 ~ "^"c" -> " {f=1; next} /^[^ #]/ {f=0} f && /void <init>\(\)/ {ok=1} END {exit !ok}' app/build/outputs/mapping/release/mapping.txt \
+              || { echo "R8 eliminó el constructor de $c (ver app/proguard-rules.pro)"; exit 1; }
+          done
       - name: Publicar en GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
