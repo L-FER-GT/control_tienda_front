@@ -26,7 +26,7 @@ data class OrderItem(
     /** Costo de compra al momento de la venta (para el reporte de ganancias). */
     val unitCostCents: Long?,
     val manual: Boolean,
-) {
+) : java.io.Serializable {
     val subtotalCents: Long get() = Money.lineTotal(unitPriceCents, quantity)
 }
 

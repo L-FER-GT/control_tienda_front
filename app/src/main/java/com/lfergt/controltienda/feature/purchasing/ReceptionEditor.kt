@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.lfergt.controltienda.ui.components.rememberGuardedBack
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -108,12 +109,16 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.lfergt.controltienda.ui.components.ProductSelectionSheet
+import com.lfergt.controltienda.ui.components.PhotoViewer
 import javax.inject.Inject
+import com.lfergt.controltienda.ui.components.UnavailableState
 
 /** Línea editable: cantidad y costo como texto mientras se escriben. */
-data class LineForm(val productId: String, val productName: String, val unit: MeasureUnit, val quantity: String, val unitCost: String)
+data class LineForm(val productId: String, val productName: String, val unit: MeasureUnit, val quantity: String, val unitCost: String) : java.io.Serializable
 
 data class ReceptionForm(
+    val unavailable: Boolean = false,
     val loaded: Boolean = false,
     val supplier: Supplier = Supplier.OTHERS,
     val receivedAt: Long = 0,
@@ -123,12 +128,13 @@ data class ReceptionForm(
     val keptPhotos: List<String> = emptyList(),
     val newPhotos: List<String> = emptyList(),
     val saving: Boolean = false,
+    val creatingProduct: Boolean = false,
     val unknownCode: ScannedCode? = null,
-)
+) : java.io.Serializable
 
 @HiltViewModel
 class ReceptionEditorViewModel @Inject constructor(
-    savedState: SavedStateHandle,
+    private val savedState: SavedStateHandle,
     source: CatalogSource,
     private val supplierRepository: SupplierRepository,
     private val receptions: ReceptionRepository,
@@ -143,17 +149,28 @@ class ReceptionEditorViewModel @Inject constructor(
     val catalog = source.observe(storeId).stateIn(viewModelScope, SharingStarted.Eagerly, CatalogData())
     val suppliers = supplierRepository.observeSuppliers(storeId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), listOf(Supplier.OTHERS))
 
-    private val _form = MutableStateFlow(ReceptionForm())
+    private val _form = MutableStateFlow(savedState.get<ReceptionForm>("editorDraft")?.copy(saving = false, creatingProduct = false) ?: ReceptionForm())
     val form = _form.asStateFlow()
+    private var baseline: ReceptionForm? = savedState["editorBaseline"]
+    val dirty: Boolean get() = baseline?.let { _form.value.copy(saving = false, creatingProduct = false, unknownCode = null) != it.copy(saving = false, unknownCode = null) } ?: false
+    private fun rememberBaseline() {
+        if (baseline == null) { baseline = _form.value; savedState["editorBaseline"] = baseline }
+    }
+
     private val doneChannel = Channel<Unit>(Channel.CONFLATED)
     val done = doneChannel.receiveAsFlow()
 
     init {
+        viewModelScope.launch { _form.collect { savedState["editorDraft"] = it.copy(saving = false, creatingProduct = false) } }
         viewModelScope.launch {
+            if (_form.value.loaded) { rememberBaseline(); return@launch }
             if (receptionId == null) {
                 _form.value = ReceptionForm(loaded = true, receivedAt = clock.now())
             } else {
-                val r = receptions.observeReception(storeId, receptionId).filterNotNull().first()
+                val r = receptions.observeReception(storeId, receptionId).first() ?: run {
+                _form.update { it.copy(loaded = true, unavailable = true) }
+                return@launch
+            }
                 // Si el proveedor fue eliminado, se conserva el nombre guardado en la recepción.
                 val supplierList = supplierRepository.observeSuppliers(storeId).first()
                 _form.value = ReceptionForm(
@@ -166,6 +183,7 @@ class ReceptionEditorViewModel @Inject constructor(
                     keptPhotos = r.invoicePhotos,
                 )
             }
+            rememberBaseline()
         }
     }
 
@@ -199,7 +217,10 @@ class ReceptionEditorViewModel @Inject constructor(
     fun dismissUnknown() = _form.update { it.copy(unknownCode = null) }
 
     /** Crea el producto que llegó y aún no estaba registrado (con stock 0: la recepción lo suma). */
-    fun quickCreate(name: String, salePriceCents: Long, costCents: Long?, code: ScannedCode) = launchSafe {
+    fun quickCreate(name: String, salePriceCents: Long, costCents: Long?, code: ScannedCode) {
+        if (_form.value.creatingProduct || _form.value.saving) return
+        _form.update { it.copy(creatingProduct = true) }
+        launchSafe(onError = { _form.update { it.copy(creatingProduct = false) } }) {
         val products = catalog.value.products
         val draft = ProductDraft(
             id = null, name = name, categoryId = null, salePriceCents = salePriceCents, purchaseCostCents = costCents,
@@ -210,10 +231,13 @@ class ReceptionEditorViewModel @Inject constructor(
         _form.update {
             it.copy(
                 unknownCode = null,
+                creatingProduct = false,
                 lines = it.lines + LineForm(id, name.trim(), MeasureUnit.UNIT, "1", Money.toInput(costCents)),
             )
         }
         message("Producto \"$name\" creado")
+    }
+
     }
 
     val linesTotalCents: Long
@@ -252,7 +276,7 @@ class ReceptionEditorViewModel @Inject constructor(
             } catch (e: Exception) {
                 message(e.userMessage())
             } finally {
-                _form.update { it.copy(saving = false) }
+                _form.update { it.copy(saving = false, creatingProduct = false) }
             }
         }
     }
@@ -268,6 +292,8 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
     var scanning by rememberSaveable { mutableStateOf<ScanMode?>(null) }
     var datePicker by rememberSaveable { mutableStateOf(false) }
     var photoSheet by rememberSaveable { mutableStateOf(false) }
+    var viewingPhoto by rememberSaveable { mutableStateOf<String?>(null) }
+    var viewingLocal by rememberSaveable { mutableStateOf(false) }
     val photoPicker = rememberPhotoPicker { viewModel.addPhoto(it.toString()) }
     val currency = catalog.header.currency
     CollectMessages(viewModel)
@@ -276,9 +302,10 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
     BackScaffold(
         title = "Recepción de mercadería",
         subtitle = if (viewModel.receptionId == null) "Nueva recepción" else "Editar recepción",
-        onBack = onBack,
+        onBack = rememberGuardedBack(viewModel.dirty, form.saving, onBack),
     ) { padding ->
         when {
+            form.unavailable -> UnavailableState(onBack, Modifier.padding(padding))
             !catalog.loaded || !form.loaded -> LoadingBox(Modifier.padding(padding))
             !catalog.header.access.can(Permission.RECEPTIONS) -> NoAccess(Modifier.padding(padding))
             else -> Column(Modifier.padding(padding).verticalScroll(rememberScrollState())) {
@@ -324,16 +351,16 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
                     Text("Fotos de la factura (${form.keptPhotos.size + form.newPhotos.size}/10)", style = MaterialTheme.typography.titleMedium)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(form.keptPhotos) { path ->
-                            PhotoThumb(onRemove = { viewModel.removeKept(path) }) { StorageImage(path, null, Modifier.size(96.dp)) }
+                            PhotoThumb(onRemove = { viewModel.removeKept(path) }, onOpen = { viewingLocal = false; viewingPhoto = path }) { StorageImage(path, null, Modifier.size(96.dp)) }
                         }
                         items(form.newPhotos) { uri ->
-                            PhotoThumb(onRemove = { viewModel.removeNew(uri) }) {
+                            PhotoThumb(onRemove = { viewModel.removeNew(uri) }, onOpen = { viewingLocal = true; viewingPhoto = uri }) {
                                 AsyncImage(uri, null, contentScale = ContentScale.Crop, modifier = Modifier.size(96.dp))
                             }
                         }
                         item {
-                            Surface(onClick = { photoSheet = true }, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                                Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.AddAPhoto, "Agregar foto") }
+                            Surface(enabled = form.keptPhotos.size + form.newPhotos.size < 10, onClick = { photoSheet = true }, shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                                Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.AddAPhoto, if (form.keptPhotos.size + form.newPhotos.size >= 10) "Límite de 10 fotos" else "Agregar foto") }
                             }
                         }
                     }
@@ -343,7 +370,7 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Button(onClick = viewModel::save, enabled = !form.saving, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                        Text(if (viewModel.receptionId == null) "Registrar recepción" else "Guardar cambios")
+                        Text(if (form.saving) "Guardando…" else if (viewModel.receptionId == null) "Registrar recepción" else "Guardar cambios")
                     }
                 }
             }
@@ -351,14 +378,16 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
     }
 
     if (picking) {
-        ProductPicker(catalog.products, currency, onDismiss = { picking = false }, onPick = { viewModel.addProduct(it) })
+        ProductSelectionSheet(catalog.products, currency, onDismiss = { picking = false }, onPick = viewModel::addProduct,
+            quantities = form.lines.associate { it.productId to it.quantity }, purchase = true)
     }
     scanning?.let { mode ->
         ScannerDialog(mode, onResult = { scanning = null; viewModel.onScanned(it) }, onDismiss = { scanning = null })
     }
     form.unknownCode?.let { code ->
-        QuickProductDialog(code, currency, onDismiss = viewModel::dismissUnknown, onCreate = viewModel::quickCreate)
+        QuickProductDialog(code, currency, busy = form.creatingProduct, onDismiss = { if (!form.creatingProduct) viewModel.dismissUnknown() }, onCreate = viewModel::quickCreate)
     }
+    viewingPhoto?.let { PhotoViewer(it, viewingLocal) { viewingPhoto = null } }
     if (photoSheet) PhotoSourceSheet(onDismiss = { photoSheet = false }, picker = photoPicker)
     if (datePicker) {
         val pickerState = rememberDatePickerState(initialSelectedDateMillis = form.receivedAt)
@@ -396,43 +425,18 @@ private fun LineEditor(line: LineForm, currency: String, onChange: (LineForm) ->
 }
 
 @Composable
-private fun PhotoThumb(onRemove: () -> Unit, content: @Composable () -> Unit) {
+private fun PhotoThumb(onRemove: () -> Unit, onOpen: () -> Unit, content: @Composable () -> Unit) {
     Box {
-        Surface(shape = MaterialTheme.shapes.medium) { content() }
-        FilledTonalIconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
+        Surface(onClick = onOpen, shape = MaterialTheme.shapes.medium) { content() }
+        FilledTonalIconButton(onClick = onRemove, modifier = Modifier.align(Alignment.TopEnd).size(48.dp)) {
             Icon(Icons.Outlined.Close, "Quitar foto", Modifier.size(16.dp))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ProductPicker(products: List<Product>, currency: String, onDismiss: () -> Unit, onPick: (Product) -> Unit) {
-    var query by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Agregar producto", style = MaterialTheme.typography.titleLarge)
-            SearchInput(query, { query = it }, "Buscar producto")
-            LazyColumn(Modifier.heightIn(max = 460.dp).padding(bottom = 24.dp)) {
-                items(products.search(query), key = { it.id }) { product ->
-                    ListItem(
-                        leadingContent = { StorageImage(product.photoPath, null, Modifier.size(44.dp)) },
-                        headlineContent = { Text(product.name) },
-                        supportingContent = {
-                            Text("Costo actual: " + (product.purchaseCostCents?.let { Money.format(it, currency) } ?: "—"))
-                        },
-                        modifier = Modifier.padding(0.dp),
-                        trailingContent = { TextButton(onClick = { onPick(product) }) { Text("Agregar") } },
-                    )
-                }
-            }
         }
     }
 }
 
 /** Producto que llegó y no estaba registrado: se crea aquí mismo (nombre, precio de venta y costo). */
 @Composable
-private fun QuickProductDialog(code: ScannedCode, currency: String, onDismiss: () -> Unit, onCreate: (String, Long, Long?, ScannedCode) -> Unit) {
+private fun QuickProductDialog(code: ScannedCode, currency: String, busy: Boolean, onDismiss: () -> Unit, onCreate: (String, Long, Long?, ScannedCode) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }
     var price by rememberSaveable { mutableStateOf("") }
     var cost by rememberSaveable { mutableStateOf("") }
@@ -442,7 +446,7 @@ private fun QuickProductDialog(code: ScannedCode, currency: String, onDismiss: (
         modifier = Modifier.widthIn(max = 520.dp),
         title = { Text("Producto no registrado") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("${if (code.isQr) "QR" else "Código de barras"}: ${code.value}", style = MaterialTheme.typography.bodySmall)
                 TextInput(name, { name = it }, "Nombre *")
                 MoneyInput(price, { price = it }, "Precio de venta *", currency)
@@ -452,8 +456,8 @@ private fun QuickProductDialog(code: ScannedCode, currency: String, onDismiss: (
         confirmButton = {
             TextButton(
                 onClick = { onCreate(name, priceCents!!, Money.parseToCents(cost), code) },
-                enabled = name.isNotBlank() && priceCents != null,
-            ) { Text("Crear y agregar") }
+                enabled = !busy && name.isNotBlank() && priceCents != null,
+            ) { Text(if (busy) "Creando…" else "Crear y agregar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
     )

@@ -22,6 +22,7 @@ import com.lfergt.controltienda.domain.port.NotificationRepository
 import com.lfergt.controltienda.domain.port.OrderRepository
 import com.lfergt.controltienda.domain.port.StoreRepository
 import com.lfergt.controltienda.domain.port.UserRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -64,6 +65,8 @@ class FakeCatalogRepository(products: List<Product> = emptyList(), categories: L
     val products = MutableStateFlow(products)
     val categories = MutableStateFlow(categories)
     val savedProducts = mutableListOf<ProductDraft>()
+    /** Si se asigna, `saveProduct` espera a que se complete (simula latencia). */
+    var saveGate: CompletableDeferred<Unit>? = null
     override fun observeCategories(storeId: String): Flow<List<Category>> = categories
     override fun observeProducts(storeId: String): Flow<List<Product>> = products
     override fun observePriceHistory(storeId: String, productId: String): Flow<List<PriceHistoryEntry>> = flowOf(emptyList())
@@ -71,6 +74,7 @@ class FakeCatalogRepository(products: List<Product> = emptyList(), categories: L
     override suspend fun deleteCategory(storeId: String, categoryId: String) = Unit
     override suspend fun assignCategory(storeId: String, productIds: List<String>, categoryId: String?) = Unit
     override suspend fun saveProduct(storeId: String, draft: ProductDraft, photo: LocalFile?): String {
+        saveGate?.await()
         savedProducts += draft
         return "p"
     }
@@ -79,7 +83,10 @@ class FakeCatalogRepository(products: List<Product> = emptyList(), categories: L
 
 class FakeOrderRepository : OrderRepository {
     val created = mutableListOf<OrderDraft>()
+    /** Si se asigna, `createOrder` espera a que se complete (simula latencia). */
+    var gate: CompletableDeferred<Unit>? = null
     override suspend fun createOrder(storeId: String, draft: OrderDraft): String {
+        gate?.await()
         created += draft
         return "o${created.size}"
     }

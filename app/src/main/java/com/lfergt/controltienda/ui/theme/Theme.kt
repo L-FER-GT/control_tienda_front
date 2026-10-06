@@ -14,75 +14,50 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 
-// Paleta del logo (#004BE4, igual que R.color.logo_background). Tonos de Material 3 (HCT) calculados con
-// material-color-utilities a partir de ese azul; el naranja terciario es un acento independiente de la marca.
-private val LogoBlue = Color(0xFF004BE4)
-
-private val LightColors = lightColorScheme(
-    primary = LogoBlue,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFDCE1FF),
-    onPrimaryContainer = Color(0xFF001551),
-    inversePrimary = Color(0xFFB7C4FF),
-    secondary = Color(0xFF555D7E),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDCE1FF),
-    onSecondaryContainer = Color(0xFF121A37),
-    tertiary = Color(0xFFB4541A),
-    tertiaryContainer = Color(0xFFFFDBC9),
-    onTertiaryContainer = Color(0xFF3A1400),
-    background = Color(0xFFFAF8FF),
-    onBackground = Color(0xFF191B24),
-    surface = Color(0xFFFAF8FF),
-    onSurface = Color(0xFF191B24),
-    surfaceVariant = Color(0xFFE0E1F5),
-    onSurfaceVariant = Color(0xFF434655),
-    surfaceTint = LogoBlue,
-    inverseSurface = Color(0xFF2E3039),
-    inverseOnSurface = Color(0xFFF0F0FC),
-    outline = Color(0xFF747687),
-    outlineVariant = Color(0xFFC3C5D8),
-    surfaceBright = Color(0xFFFAF8FF),
-    surfaceDim = Color(0xFFD9D9E5),
-    surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF3F2FF),
-    surfaceContainer = Color(0xFFEDEDF9),
-    surfaceContainerHigh = Color(0xFFE7E7F4),
-    surfaceContainerHighest = Color(0xFFE2E1EE),
-    error = Color(0xFFBA1A1A),
+// Blue + Slate de Radix Colors, adaptados a los roles de Material 3.
+// https://www.radix-ui.com/colors/docs/palette-composition/scales
+internal val LightColors = lightColorScheme(
+    primary = Color(0xFF005EA8), onPrimary = Color.White,
+    primaryContainer = Color(0xFFD5EFFF), onPrimaryContainer = Color(0xFF113264),
+    inversePrimary = Color(0xFF70B8FF),
+    secondary = Color(0xFF355F80), onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE6F4FE), onSecondaryContainer = Color(0xFF113264),
+    tertiary = Color(0xFF005E78), onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFDDF4FF), onTertiaryContainer = Color(0xFF00364A),
+    background = Color(0xFFFBFDFF), onBackground = Color(0xFF1C2024),
+    surface = Color(0xFFFBFDFF), onSurface = Color(0xFF1C2024),
+    surfaceVariant = Color(0xFFE0E1E6), onSurfaceVariant = Color(0xFF4A515B),
+    surfaceTint = Color(0xFF005EA8),
+    inverseSurface = Color(0xFF1C2024), inverseOnSurface = Color(0xFFF0F0F3),
+    outline = Color(0xFF60646C), outlineVariant = Color(0xFFCDCED6),
+    surfaceBright = Color(0xFFFBFDFF), surfaceDim = Color(0xFFE0E1E6),
+    surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF4FAFF),
+    surfaceContainer = Color(0xFFF0F4F8), surfaceContainerHigh = Color(0xFFE8EEF4),
+    surfaceContainerHighest = Color(0xFFE0E8F0),
+    error = Color(0xFFAA2429), onError = Color.White,
+    errorContainer = Color(0xFFFFDAD8), onErrorContainer = Color(0xFF410008),
 )
 
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFB7C4FF),
-    onPrimary = Color(0xFF002780),
-    primaryContainer = Color(0xFF0039B4),
-    onPrimaryContainer = Color(0xFFDCE1FF),
-    inversePrimary = LogoBlue,
-    secondary = Color(0xFFBDC5EB),
-    onSecondary = Color(0xFF272F4D),
-    secondaryContainer = Color(0xFF3E4565),
-    onSecondaryContainer = Color(0xFFDCE1FF),
-    tertiary = Color(0xFFFFB68F),
-    tertiaryContainer = Color(0xFF8A3D06),
-    onTertiaryContainer = Color(0xFFFFDBC9),
-    background = Color(0xFF11131B),
-    onBackground = Color(0xFFE2E1EE),
-    surface = Color(0xFF11131B),
-    onSurface = Color(0xFFE2E1EE),
-    surfaceVariant = Color(0xFF434655),
-    onSurfaceVariant = Color(0xFFC3C5D8),
-    surfaceTint = Color(0xFFB7C4FF),
-    inverseSurface = Color(0xFFE2E1EE),
-    inverseOnSurface = Color(0xFF2E3039),
-    outline = Color(0xFF8D90A1),
-    outlineVariant = Color(0xFF434655),
-    surfaceBright = Color(0xFF373942),
-    surfaceDim = Color(0xFF11131B),
-    surfaceContainerLowest = Color(0xFF0C0E16),
-    surfaceContainerLow = Color(0xFF191B24),
-    surfaceContainer = Color(0xFF1D1F28),
-    surfaceContainerHigh = Color(0xFF282933),
-    surfaceContainerHighest = Color(0xFF33343E),
+internal val DarkColors = darkColorScheme(
+    primary = Color(0xFF70B8FF), onPrimary = Color(0xFF102A43),
+    primaryContainer = Color(0xFF004074), onPrimaryContainer = Color(0xFFC2E6FF),
+    inversePrimary = Color(0xFF005EA8),
+    secondary = Color(0xFFACD8FC), onSecondary = Color(0xFF102A43),
+    secondaryContainer = Color(0xFF243F55), onSecondaryContainer = Color(0xFFD5EFFF),
+    tertiary = Color(0xFF7CDCF5), onTertiary = Color(0xFF00364A),
+    tertiaryContainer = Color(0xFF004D63), onTertiaryContainer = Color(0xFFDDF4FF),
+    background = Color(0xFF111822), onBackground = Color(0xFFEDF2F7),
+    surface = Color(0xFF111822), onSurface = Color(0xFFEDF2F7),
+    surfaceVariant = Color(0xFF394553), onSurfaceVariant = Color(0xFFB7C5D3),
+    surfaceTint = Color(0xFF70B8FF),
+    inverseSurface = Color(0xFFEDF2F7), inverseOnSurface = Color(0xFF1C2024),
+    outline = Color(0xFF91A2B4), outlineVariant = Color(0xFF394553),
+    surfaceBright = Color(0xFF344354), surfaceDim = Color(0xFF111822),
+    surfaceContainerLowest = Color(0xFF0B1119), surfaceContainerLow = Color(0xFF17212D),
+    surfaceContainer = Color(0xFF1C2938), surfaceContainerHigh = Color(0xFF243446),
+    surfaceContainerHighest = Color(0xFF2C3E51),
+    error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A), onErrorContainer = Color(0xFFFFDAD8),
 )
 
 private val AppTypography = Typography().run {
@@ -100,11 +75,19 @@ private val AppShapes = Shapes(
     large = RoundedCornerShape(22.dp),
 )
 
+/** Advertencia y éxito por tema; el peligro usa `error` del esquema. */
+internal class StatusPalette(val warning: Color, val ok: Color)
+
+internal val LightStatus = StatusPalette(warning = Color(0xFF785000), ok = Color(0xFF176044))
+internal val DarkStatus = StatusPalette(warning = Color(0xFFFFD580), ok = Color(0xFF8DDEBB))
+
 /** Colores de estado reutilizados (alertas de stock y consumo). */
 object StatusColors {
-    val warning = Color(0xFFE6A100)
-    val danger = Color(0xFFD64545)
-    val ok = Color(0xFF2E9E6A)
+    private val palette: StatusPalette @Composable get() =
+        if (MaterialTheme.colorScheme.surface == DarkColors.surface) DarkStatus else LightStatus
+    val warning: Color @Composable get() = palette.warning
+    val danger: Color @Composable get() = MaterialTheme.colorScheme.error
+    val ok: Color @Composable get() = palette.ok
 }
 
 @Composable

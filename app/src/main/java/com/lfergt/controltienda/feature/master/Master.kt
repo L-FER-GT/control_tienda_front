@@ -32,6 +32,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -63,11 +65,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.Locale
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import com.lfergt.controltienda.domain.error.userMessage
 import javax.inject.Inject
 
 data class MasterState(
     val usage: UsageReport? = null,
     val loadingUsage: Boolean = false,
+    val userSearching: Boolean = false,
+    val storeSearching: Boolean = false,
     val userQuery: String = "",
     val users: List<PublicProfile> = emptyList(),
     val storeQuery: String = "",
@@ -96,14 +105,29 @@ class MasterViewModel @Inject constructor(
         }
     }
 
+    private var userSearch: Job? = null
+    private var storeSearch: Job? = null
     fun onUserQuery(q: String) {
-        _state.update { it.copy(userQuery = q) }
-        if (q.trim().length >= 2) launchSafe { _state.update { it.copy(users = admin.searchUsers(q)) } }
+        userSearch?.cancel()
+        _state.update { it.copy(userQuery = q, users = emptyList(), userSearching = q.trim().length >= 2) }
+        if (q.trim().length < 2) return
+        userSearch = viewModelScope.launch {
+            try { delay(350); val result = admin.searchUsers(q); if (_state.value.userQuery == q) _state.update { it.copy(users = result) } }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { message(e.userMessage()) }
+            finally { if (_state.value.userQuery == q) _state.update { it.copy(userSearching = false) } }
+        }
     }
-
     fun onStoreQuery(q: String) {
-        _state.update { it.copy(storeQuery = q) }
-        if (q.trim().isNotEmpty()) launchSafe { _state.update { it.copy(stores = admin.searchStores(q)) } }
+        storeSearch?.cancel()
+        _state.update { it.copy(storeQuery = q, stores = emptyList(), storeSearching = q.isNotBlank()) }
+        if (q.isBlank()) return
+        storeSearch = viewModelScope.launch {
+            try { delay(350); val result = admin.searchStores(q); if (_state.value.storeQuery == q) _state.update { it.copy(stores = result) } }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { message(e.userMessage()) }
+            finally { if (_state.value.storeQuery == q) _state.update { it.copy(storeSearching = false) } }
+        }
     }
 
     fun setUserDisabled(user: PublicProfile, disabled: Boolean) = launchSafe {
@@ -234,13 +258,15 @@ private fun UsageCard(metric: UsageMetric) {
 private fun UsersTab(state: MasterState, onQuery: (String) -> Unit, onDisable: (PublicProfile, Boolean) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { SearchInput(state.userQuery, onQuery, "Buscar por nombre o código") }
+        if (state.userSearching) item { Text("Buscando…") }
+        else if (state.users.isEmpty()) item { Text(if (state.userQuery.length < 2) "Escribe al menos dos caracteres" else "Sin resultados") }
         items(state.users, key = { it.uid }) { user ->
             ListItem(
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 leadingContent = { Avatar(user.displayName, user.photoPath) },
                 headlineContent = { Text(user.displayName) },
                 supportingContent = { Text(UserCode.pretty(user.code) + if (user.disabled) " · Deshabilitado" else "") },
-                trailingContent = { Switch(checked = !user.disabled, onCheckedChange = { enabled -> onDisable(user, !enabled) }) },
+                trailingContent = { Switch(modifier = Modifier.semantics { contentDescription = "Habilitar ${user.displayName}" }, checked = !user.disabled, onCheckedChange = { enabled -> onDisable(user, !enabled) }) },
             )
         }
     }
@@ -250,6 +276,8 @@ private fun UsersTab(state: MasterState, onQuery: (String) -> Unit, onDisable: (
 private fun StoresTab(state: MasterState, onQuery: (String) -> Unit, onDisable: (Store, Boolean) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { SearchInput(state.storeQuery, onQuery, "Buscar tienda por nombre") }
+        if (state.storeSearching) item { Text("Buscando…") }
+        else if (state.stores.isEmpty()) item { Text(if (state.storeQuery.isBlank()) "Escribe el nombre de la tienda" else "Sin resultados") }
         items(state.stores, key = { it.id }) { store ->
             ListItem(
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -257,7 +285,7 @@ private fun StoresTab(state: MasterState, onQuery: (String) -> Unit, onDisable: 
                 supportingContent = {
                     Text("${store.address} · Dueño: ${store.ownerName}" + if (store.disabledBySystem) " · Deshabilitada" else "")
                 },
-                trailingContent = { Switch(checked = !store.disabledBySystem, onCheckedChange = { enabled -> onDisable(store, !enabled) }) },
+                trailingContent = { Switch(modifier = Modifier.semantics { contentDescription = "Habilitar tienda ${store.name}" }, checked = !store.disabledBySystem, onCheckedChange = { enabled -> onDisable(store, !enabled) }) },
             )
         }
     }

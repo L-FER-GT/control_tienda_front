@@ -38,7 +38,19 @@ import com.lfergt.controltienda.ui.components.SearchInput
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.Card
+import androidx.compose.material3.Text
+import com.lfergt.controltienda.ui.components.Dropdown
+import com.lfergt.controltienda.domain.model.Category
+import com.lfergt.controltienda.domain.model.Money
 import javax.inject.Inject
+import com.lfergt.controltienda.ui.components.StockLabel
 
 @HiltViewModel
 class ManageProductsViewModel @Inject constructor(savedState: SavedStateHandle, source: CatalogSource) : BaseViewModel() {
@@ -58,11 +70,14 @@ fun ManageProductsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf(Category.ALL_ID) }
+    var stockFilter by rememberSaveable { mutableStateOf("Todos") }
+    var compact by rememberSaveable { mutableStateOf(false) }
     var scanning by rememberSaveable { mutableStateOf<ScanMode?>(null) }
     val allowed = state.header.access.can(Permission.MANAGE_PRODUCTS)
 
     BackScaffold(
-        title = state.header.name,
+        title = "Gestionar productos", subtitle = state.header.name,
         onBack = onBack,
         floatingActionButton = {
             if (allowed) {
@@ -81,9 +96,22 @@ fun ManageProductsScreen(
             !state.loaded -> LoadingBox(Modifier.padding(padding))
             !allowed -> NoAccess(Modifier.padding(padding))
             else -> {
-                val products = state.products.search(query)
+                val products = state.products.search(query).filter { category == Category.ALL_ID || it.categoryId == category }.filter { product ->
+                    when (stockFilter) { "Sin stock" -> product.stock != null && product.stock!! <= 0; "Stock bajo" -> product.stock != null && product.stockAlert != null && product.stock!! <= product.stockAlert!!; else -> true }
+                }
                 AdaptiveGrid(minCellSize = 150.dp, modifier = Modifier.padding(padding), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 120.dp)) {
                     item(span = { GridItemSpan(maxLineSpan) }) { SearchInput(query, { query = it }, "Buscar por nombre o código") }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Dropdown("Categoría", listOf(Category.ALL_ID) + state.categories.map { it.id }, category,
+                                { if (it == Category.ALL_ID) "Todas las categorías" else state.categoryName(it) ?: "Sin categoría" }, { category = it })
+                            Dropdown("Inventario", listOf("Todos", "Sin stock", "Stock bajo"), stockFilter, { it }, { stockFilter = it })
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("${products.size} productos")
+                                TextButton(onClick = { compact = !compact }) { Text(if (compact) "Ver tarjetas" else "Ver lista") }
+                            }
+                        }
+                    }
                     if (products.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             EmptyState(
@@ -93,8 +121,10 @@ fun ManageProductsScreen(
                             )
                         }
                     }
-                    items(products, key = { it.id }) { product ->
-                        ProductTile(
+                    items(products, key = { it.id }, span = { GridItemSpan(if (compact) maxLineSpan else 1) }) { product ->
+                        if (compact) Card(onClick = { onEdit(product.id, null) }, modifier = Modifier.fillMaxWidth()) {
+                            ListItem(headlineContent = { Text(product.name) }, supportingContent = { StockLabel(product) }, trailingContent = { Text(Money.format(product.salePriceCents, state.header.currency)) })
+                        } else ProductTile(
                             product = product,
                             currency = state.header.currency,
                             showStock = true,

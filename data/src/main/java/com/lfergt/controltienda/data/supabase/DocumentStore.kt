@@ -52,6 +52,17 @@ class DocumentStore @Inject constructor(
     private val pollCache = mutableMapOf<String, Pair<String, String>>()
     private fun uid() = auth.currentUser?.uid ?: throw DomainError.Auth("Debes iniciar sesión")
 
+    private fun pendingCount(user: String): Int = local.readableDatabase.rawQuery("SELECT COUNT(*) FROM outbox WHERE uid=?", arrayOf(user)).use { it.moveToFirst(); it.getInt(0) }
+    init {
+        scope.launch(Dispatchers.IO) {
+            var previousUser: String? = null
+            combine(revision, auth.session) { _, session -> session?.uid }.collect { user ->
+                if (user != previousUser) { sync.reset(); previousUser = user }
+                sync.queueChanged(user?.let(::pendingCount) ?: 0)
+            }
+        }
+    }
+
     fun collection(path: String) = CollectionReference(this, path)
     fun collectionGroup(group: String) = Query(this, mapOf("group" to group))
     fun document(path: String) = DocumentReference(this, path)
@@ -74,6 +85,8 @@ class DocumentStore @Inject constructor(
     /** Returns false on transient errors. Permanent rejections roll back only their batch. */
     suspend fun flush(): Boolean = mutex.withLock { withContext(Dispatchers.IO) {
         val user = auth.currentUser?.uid ?: return@withContext true
+        sync.syncing(pendingCount(user) > 0)
+        try {
         while (auth.currentUser?.uid == user) {
             val row = local.readableDatabase.rawQuery("SELECT id,operations FROM outbox WHERE uid=? ORDER BY seq LIMIT 1", arrayOf(user)).use {
                 if (it.moveToFirst()) it.getString(0) to it.getString(1) else null
@@ -97,6 +110,8 @@ class DocumentStore @Inject constructor(
                     }
                     db.delete("outbox", "id=?", arrayOf(row.first)); db.setTransactionSuccessful()
                 } finally { db.endTransaction() }
+                sync.completed(System.currentTimeMillis())
+                sync.queueChanged(pendingCount(user))
                 revision.value++
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
@@ -106,6 +121,10 @@ class DocumentStore @Inject constructor(
             }
         }
         false
+        } finally {
+            if (auth.currentUser?.uid == user) sync.queueChanged(pendingCount(user))
+            sync.syncing(false)
+        }
     } }
 
     private fun put(db: SQLiteDatabase, user: String, path: String, data: String) {
@@ -190,8 +209,10 @@ class DocumentStore @Inject constructor(
     } }
 
     internal fun observe(query: Query): Flow<QuerySnapshot> = channelFlow {
-        launch { combine(revision, auth.session) { _, session -> session }.collect { session ->
-            send(if(session==null) QuerySnapshot(emptyList()) else cached(query))
+        val attempted = MutableStateFlow(false)
+        launch { combine(revision, auth.session, attempted) { _, session, ready -> session to ready }.collect { (session, ready) ->
+            val snapshot = if (session == null) QuerySnapshot(emptyList()) else cached(query)
+            if (session == null || ready || snapshot.documents.isNotEmpty()) send(snapshot)
         } }
         while (currentCoroutineContext().isActive) {
             try { if(auth.currentUser!=null) { flush(); refresh(query) } }
@@ -199,6 +220,7 @@ class DocumentStore @Inject constructor(
             catch (e: Exception) {
                 if (e !is IOException && !(e is ApiException && e.retryable)) sync.report(e.toDomainError())
             }
+            attempted.value = true
             delay(15_000)
         }
     }.distinctUntilChanged()

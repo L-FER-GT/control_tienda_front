@@ -83,7 +83,7 @@ enum class ScanMode(val formats: IntArray) {
     ANY(BARCODE.formats + QR.formats),
 }
 
-data class ScannedCode(val value: String, val isQr: Boolean)
+data class ScannedCode(val value: String, val isQr: Boolean) : java.io.Serializable
 
 /**
  * El cuadro guía el enfoque. También acepta un único código fuera del cuadro.

@@ -1,5 +1,8 @@
 package com.lfergt.controltienda.feature.catalog
 
+import java.text.Normalizer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
@@ -51,8 +54,11 @@ class CatalogSource @Inject constructor(
 fun List<Product>.search(query: String): List<Product> {
     val q = query.trim().lowercase()
     if (q.isEmpty()) return this
-    return filter { it.name.lowercase().contains(q) || it.barcode?.contains(q, ignoreCase = true) == true || it.qrCode?.contains(q, ignoreCase = true) == true }
+    val words = normalizedSearch(query).split(Regex("\\s+"))
+    return filter { product -> words.all { normalizedSearch(product.name).contains(it) } || product.barcode?.contains(q, ignoreCase = true) == true || product.qrCode?.contains(q, ignoreCase = true) == true }
 }
+
+fun normalizedSearch(value: String): String = Normalizer.normalize(value.trim().lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
 /** Detalle rápido de un producto (al tocarlo en "Ver productos"). */
 @Composable
@@ -62,7 +68,7 @@ fun ProductDetailDialog(product: Product, currency: String, categoryName: String
         modifier = Modifier.widthIn(max = 520.dp),
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 StorageImage(product.photoPath, product.name, Modifier.fillMaxWidth().aspectRatio(1.3f))
                 Text(product.name, style = MaterialTheme.typography.titleLarge)
                 Text(

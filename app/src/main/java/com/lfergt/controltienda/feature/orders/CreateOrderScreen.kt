@@ -1,5 +1,13 @@
 package com.lfergt.controltienda.feature.orders
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material.icons.outlined.Search
+import com.lfergt.controltienda.ui.components.LocalSnackbar
+import com.lfergt.controltienda.ui.components.ProductSelectionSheet
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -97,20 +105,33 @@ fun CreateOrderScreen(
     var manualOpen by rememberSaveable { mutableStateOf(false) }
     var manualPrefill by rememberSaveable { mutableStateOf("") }
     var confirmExit by rememberSaveable { mutableStateOf(false) }
+    var picking by rememberSaveable { mutableStateOf(false) }
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
+    var editingQuantity by rememberSaveable { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val snackbar = LocalSnackbar.current
     val currency = state.catalog.header.currency
+    fun removeLine(line: CartLine) {
+        viewModel.remove(line.key)
+        scope.launch {
+            if (snackbar.showSnackbar("Producto quitado", actionLabel = "Deshacer") == SnackbarResult.ActionPerformed) viewModel.restoreLine(line)
+        }
+    }
     CollectMessages(viewModel)
 
-    BackHandler(enabled = !state.cart.isEmpty && state.scanMode == null) { confirmExit = true }
-    val back = { if (state.cart.isEmpty) onBack() else confirmExit = true }
+    BackHandler(enabled = (!state.cart.isEmpty || state.saving) && state.scanMode == null) { if (!state.saving) confirmExit = true }
+    val back = { if (!state.saving) { if (state.cart.isEmpty) onBack() else confirmExit = true } }
 
     BackScaffold(
-        title = state.catalog.header.name,
+        title = "Nueva venta",
+        subtitle = state.catalog.header.name,
         onBack = back,
         floatingActionButton = {
-            if (state.catalog.header.access.isStaff) {
+            if (state.catalog.header.access.isStaff && !state.saving) {
                 ExpandableFab(
                     icon = Icons.Outlined.Add,
                     actions = listOf(
+                        FabAction("Buscar producto o código", Icons.Outlined.Search) { picking = true },
                         FabAction("Escanear código de barras", Icons.Outlined.ViewWeek) { viewModel.openScanner(ScanMode.BARCODE) },
                         FabAction("Escanear QR", Icons.Outlined.QrCode2) { viewModel.openScanner(ScanMode.QR) },
                         FabAction("Introducción manual", Icons.Outlined.EditNote) { manualPrefill = ""; manualOpen = true },
@@ -136,8 +157,8 @@ fun CreateOrderScreen(
             !state.catalog.header.access.isStaff -> NoAccess(Modifier.padding(padding))
             state.cart.isEmpty -> EmptyState(
                 Icons.Outlined.ShoppingCart,
-                "Orden vacía",
-                "Usa el botón + para escanear un código de barras, un QR o ingresar un ítem manualmente.",
+                "Empieza una venta",
+                "Busca un producto por nombre o código, escanéalo o agrega un ítem manual con el botón +.",
                 Modifier.padding(padding),
             )
             else -> LazyColumn(
@@ -149,7 +170,7 @@ fun CreateOrderScreen(
                 item {
                     Row(Modifier.widthIn(max = 720.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("Resumen (${state.cart.itemCount} ítems)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = viewModel::clear) { Text("Vaciar") }
+                        TextButton(onClick = { confirmClear = true }, enabled = !state.saving) { Text("Vaciar") }
                     }
                 }
                 items(state.cart.lines, key = { it.key }) { line ->
@@ -157,14 +178,26 @@ fun CreateOrderScreen(
                         line = line,
                         currency = currency,
                         photoPath = line.item.productId?.let { id -> state.catalog.products.firstOrNull { it.id == id }?.photoPath },
-                        onQuantity = { viewModel.setQuantity(line.key, it) },
-                        onRemove = { viewModel.remove(line.key) },
+                        enabled = !state.saving,
+                        onEditQuantity = { editingQuantity = line.key },
+                        onQuantity = { if (it <= 0) removeLine(line) else viewModel.setQuantity(line.key, it) },
+                        onRemove = { removeLine(line) },
                     )
                 }
             }
         }
     }
 
+    if (picking && !state.saving) ProductSelectionSheet(
+        state.catalog.products, currency, onDismiss = { picking = false }, onPick = viewModel::addProduct,
+        quantities = state.cart.lines.mapNotNull { line -> line.item.productId?.let { it to line.item.unit.formatQuantity(line.item.quantity) } }.toMap(),
+    )
+    if (confirmClear) ConfirmDialog("¿Vaciar la venta?", "Se quitarán todos los productos del resumen.", "Vaciar", viewModel::clear, { confirmClear = false })
+    editingQuantity?.let { key ->
+        state.cart.lines.firstOrNull { it.key == key }?.let { line ->
+            QuantityDialog(line, onDismiss = { editingQuantity = null }, onSave = { viewModel.setQuantity(key, it); editingQuantity = null })
+        }
+    }
     state.scanMode?.let { mode ->
         ScanOverlay(
             mode = mode,
@@ -200,11 +233,12 @@ fun CreateOrderScreen(
 }
 
 @Composable
-private fun CartLineRow(line: CartLine, currency: String, photoPath: String?, onQuantity: (Double) -> Unit, onRemove: () -> Unit) {
+private fun CartLineRow(line: CartLine, currency: String, photoPath: String?, enabled: Boolean, onEditQuantity: () -> Unit, onQuantity: (Double) -> Unit, onRemove: () -> Unit) {
     val item = line.item
     val step = if (item.unit.allowsDecimals) 0.25 else 1.0
     Card(Modifier.widthIn(max = 720.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.padding(12.dp)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
             StorageImage(photoPath, null, Modifier.size(52.dp), placeholderIcon = if (item.manual) Icons.Outlined.EditNote else Icons.Outlined.ShoppingCart)
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(item.description, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -216,10 +250,13 @@ private fun CartLineRow(line: CartLine, currency: String, photoPath: String?, on
                 )
                 Text(Money.format(item.subtotalCents, currency), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             }
-            IconButton(onClick = { onQuantity(item.quantity - step) }) { Icon(Icons.Outlined.Remove, "Menos") }
-            Text(item.unit.formatQuantity(item.quantity), style = MaterialTheme.typography.titleMedium)
-            IconButton(onClick = { onQuantity(item.quantity + step) }) { Icon(Icons.Outlined.Add, "Más") }
-            IconButton(onClick = onRemove) { Icon(Icons.Outlined.DeleteOutline, "Quitar") }
+          }
+          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(enabled = enabled, onClick = { onQuantity(item.quantity - step) }) { Icon(Icons.Outlined.Remove, "Reducir cantidad de ${item.description}") }
+            TextButton(onClick = onEditQuantity, enabled = enabled) { Text("${item.unit.formatQuantity(item.quantity)} ${item.unit.symbol}") }
+            IconButton(enabled = enabled, onClick = { onQuantity(item.quantity + step) }) { Icon(Icons.Outlined.Add, "Más") }
+            IconButton(enabled = enabled, onClick = onRemove) { Icon(Icons.Outlined.DeleteOutline, "Quitar ${item.description}") }
+          }
         }
     }
 }
@@ -238,7 +275,7 @@ private fun CheckoutBar(
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(PaymentMethod.entries) { method ->
-                    FilterChip(selected = method == payment, onClick = { onPayment(method) }, label = { Text(method.label) })
+                    FilterChip(enabled = !saving, selected = method == payment, onClick = { onPayment(method) }, label = { Text(method.label) })
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -359,7 +396,7 @@ private fun ManualItemDialog(
         modifier = Modifier.widthIn(max = 560.dp),
         title = { Text("Ítem manual") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 TextInput(detail, { detail = it }, "Detalle *", singleLine = false)
                 Dropdown(
                     label = "Categoría",
@@ -391,6 +428,19 @@ private fun ManualItemDialog(
         confirmButton = {
             TextButton(onClick = { onAdd(detail.trim(), categoryId, priceCents!!, qty!!, unit) }, enabled = valid) { Text("Agregar") }
         },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+    )
+}
+
+@Composable
+private fun QuantityDialog(line: CartLine, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
+    var value by rememberSaveable(line.key) { mutableStateOf(line.item.unit.formatQuantity(line.item.quantity)) }
+    val quantity = value.toDecimalOrNull()
+    val valid = quantity != null && quantity.isFinite() && quantity > 0 && (line.item.unit.allowsDecimals || quantity % 1.0 == 0.0)
+    AlertDialog(onDismissRequest = onDismiss,
+        title = { Text(line.item.description) },
+        text = { DecimalInput(value, { value = it }, "Cantidad (${line.item.unit.symbol})", error = if (!valid) "Ingresa una cantidad positiva${if (line.item.unit.allowsDecimals) "" else " sin decimales"}" else null) },
+        confirmButton = { TextButton(onClick = { quantity?.let(onSave) }, enabled = valid) { Text("Aplicar") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
     )
 }

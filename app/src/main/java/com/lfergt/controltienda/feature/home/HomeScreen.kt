@@ -44,6 +44,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -80,7 +82,6 @@ fun HomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
     CollectMessages(viewModel)
-    RequestNotificationPermission()
 
     Scaffold(
         topBar = {
@@ -94,7 +95,7 @@ fun HomeScreen(
                         }
                     }
                     Box {
-                        IconButton(onClick = { menuOpen = true }) {
+                        IconButton(onClick = { menuOpen = true }, modifier = Modifier.semantics { contentDescription = "Abrir menú de cuenta" }) {
                             Avatar(state.me?.displayName ?: "", state.me?.photoPath, size = 34.dp)
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -191,15 +192,3 @@ fun HomeScreen(
     }
 }
 
-/** Android 13+: pide permiso para mostrar las notificaciones push (invitaciones, alertas). */
-@Composable
-private fun RequestNotificationPermission() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-    val context = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-}

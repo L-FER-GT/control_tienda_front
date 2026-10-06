@@ -77,22 +77,30 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.lfergt.controltienda.feature.update.LocalUpdater
+import com.lfergt.controltienda.ui.components.rememberGuardedBack
 
-data class ProfileForm(val name: String = "", val phone: String = "", val saving: Boolean = false, val deleting: Boolean = false)
+data class ProfileForm(val name: String = "", val phone: String = "", val saving: Boolean = false, val deleting: Boolean = false) : java.io.Serializable
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val users: UserRepository,
+    private val savedState: androidx.lifecycle.SavedStateHandle,
 ) : BaseViewModel() {
 
     val me = users.observeMe().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-    private val _form = MutableStateFlow(ProfileForm())
+    private val _form = MutableStateFlow(savedState.get<ProfileForm>("draft")?.copy(saving = false, deleting = false) ?: ProfileForm())
     val form = _form.asStateFlow()
+    private var baseline: ProfileForm? = savedState["baseline"]
+    val dirty: Boolean get() = baseline?.let { _form.value.copy(saving = false, deleting = false) != it } ?: false
 
     init {
         viewModelScope.launch {
             val profile = users.observeMe().filterNotNull().first()
-            _form.update { it.copy(name = profile.displayName, phone = profile.phone ?: "") }
+            if (savedState.get<ProfileForm>("draft") == null) _form.update { it.copy(name = profile.displayName, phone = profile.phone ?: "") }
+            if (baseline == null) baseline = ProfileForm(name = profile.displayName, phone = profile.phone ?: "")
+            savedState["baseline"] = baseline
+            _form.collect { savedState["draft"] = it.copy(saving = false, deleting = false) }
         }
     }
 
@@ -100,9 +108,13 @@ class SettingsViewModel @Inject constructor(
     fun onPhone(v: String) = _form.update { it.copy(phone = v.filter { c -> c.isDigit() || c == '+' || c == ' ' }) }
 
     fun save() {
+        if (_form.value.saving) return
+        val submitted = _form.value
         _form.update { it.copy(saving = true) }
         launchSafe(onError = { _form.update { it.copy(saving = false) } }) {
-            users.updateProfile(_form.value.name, _form.value.phone)
+            users.updateProfile(submitted.name, submitted.phone)
+            baseline = submitted.copy(saving = false, deleting = false)
+            savedState["baseline"] = baseline
             _form.update { it.copy(saving = false) }
             message("Datos actualizados")
         }
@@ -123,7 +135,7 @@ class SettingsViewModel @Inject constructor(
 fun SettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
-    updater: UpdateViewModel = hiltViewModel(),
+    updater: UpdateViewModel = LocalUpdater.current ?: hiltViewModel(),
 ) {
     val me by viewModel.me.collectAsStateWithLifecycle()
     val form by viewModel.form.collectAsStateWithLifecycle()
@@ -132,9 +144,9 @@ fun SettingsScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     val picker = rememberPhotoPicker { viewModel.updatePhoto(it.toString()) }
     CollectMessages(viewModel)
-    CollectMessages(updater)
+    if (LocalUpdater.current == null) CollectMessages(updater)
 
-    BackScaffold(title = "Configuración", onBack = onBack) { padding ->
+    BackScaffold(title = "Configuración", onBack = rememberGuardedBack(viewModel.dirty, form.saving || form.deleting, onBack)) { padding ->
         val profile = me
         if (profile == null) {
             LoadingBox(Modifier.padding(padding))
@@ -158,16 +170,22 @@ fun SettingsScreen(
                 TextInput(form.phone, viewModel::onPhone, "Teléfono (opcional)", keyboardType = KeyboardType.Phone)
                 TextInput(profile.email ?: "", {}, "Correo", enabled = false)
                 Button(onClick = viewModel::save, enabled = !form.saving, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                    Text("Guardar cambios")
+                    Text(if (form.saving) "Guardando…" else "Guardar cambios")
                 }
                 if (updater.enabled) {
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     Text("Aplicación", style = MaterialTheme.typography.titleMedium)
                     OutlinedButton(
                         onClick = updater::check,
-                        enabled = updateState == UpdateState.Idle,
+                        enabled = updateState != UpdateState.Checking,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (updateState == UpdateState.Checking) "Buscando…" else "Buscar actualizaciones") }
+                    ) { Text(when (val update = updateState) {
+                        UpdateState.Checking -> "Buscando…"
+                        is UpdateState.Downloading -> "Descargando ${update.percent} % · Ver"
+                        is UpdateState.Ready -> "Actualización lista · Instalar"
+                        is UpdateState.Available -> "Ver actualización disponible"
+                        else -> "Buscar actualizaciones"
+                    }) }
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text("Zona de peligro", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
@@ -185,14 +203,14 @@ fun SettingsScreen(
                 Text(
                     "Control Tienda ${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 )
             }
         }
     }
 
-    UpdateDialogs(updater)
+    if (LocalUpdater.current == null) UpdateDialogs(updater)
     if (photoSheet) PhotoSourceSheet(onDismiss = { photoSheet = false }, picker = picker)
     if (confirmDelete) DeleteAccountDialog(onDismiss = { confirmDelete = false }, onConfirm = { confirmDelete = false; viewModel.deleteAccount() })
 }
@@ -205,14 +223,15 @@ private fun MyCodeCard(profile: UserProfile) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Mi código", style = MaterialTheme.typography.labelLarge)
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Column {
                 Text(
                     UserCode.pretty(profile.code),
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                 )
+                Row {
                 IconButton(onClick = { scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Código", profile.code))) } }) {
                     Icon(Icons.Outlined.ContentCopy, contentDescription = "Copiar")
                 }
@@ -222,7 +241,8 @@ private fun MyCodeCard(profile: UserProfile) {
                         putExtra(Intent.EXTRA_TEXT, "Mi código en Control Tienda es ${profile.code}. Úsalo para invitarme a tu tienda.")
                     }
                     context.startActivity(Intent.createChooser(send, "Compartir código"))
-                }) { Icon(Icons.Outlined.Share, contentDescription = "Compartir") }
+                }) { Icon(Icons.Outlined.Share, contentDescription = "Compartir código") }
+                }
             }
             Text(
                 "Compártelo para que te inviten como empleado o cliente de una tienda.",

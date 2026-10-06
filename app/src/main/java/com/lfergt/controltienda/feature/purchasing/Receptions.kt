@@ -47,6 +47,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.lfergt.controltienda.ui.components.HistoryPeriod
+import com.lfergt.controltienda.ui.components.HistoryFilters
+import com.lfergt.controltienda.feature.catalog.normalizedSearch
 import javax.inject.Inject
 
 data class ReceptionsState(val header: StoreHeader = StoreHeader(), val receptions: List<Reception> = emptyList())
@@ -66,9 +72,12 @@ class ReceptionsViewModel @Inject constructor(
 @Composable
 fun ReceptionsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: ReceptionsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    var period by rememberSaveable { mutableStateOf(HistoryPeriod.ALL) }
+    val visible = state.receptions.filter { r -> period.includes(r.receivedAt) && normalizedSearch(r.supplierName + " " + r.notes.orEmpty() + " " + r.lines.joinToString { it.productName }).contains(normalizedSearch(query)) }
     val allowed = state.header.access.can(Permission.RECEPTIONS)
     BackScaffold(
-        title = state.header.name,
+        title = "Recepciones", subtitle = state.header.name,
         onBack = onBack,
         floatingActionButton = {
             if (allowed) ExtendedFloatingActionButton(onClick = { onEdit(null) }, icon = { Icon(Icons.Outlined.Add, null) }, text = { Text("Registrar recepción") })
@@ -89,7 +98,9 @@ fun ReceptionsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: R
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                items(state.receptions, key = { it.id }) { r ->
+                item { HistoryFilters(query, { query = it }, period, { period = it }, visible.size) }
+                if (visible.isEmpty()) item { Text("Sin recepciones para estos filtros.") }
+                items(visible, key = { it.id }) { r ->
                     Card(
                         onClick = { onEdit(r.id) },
                         modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),

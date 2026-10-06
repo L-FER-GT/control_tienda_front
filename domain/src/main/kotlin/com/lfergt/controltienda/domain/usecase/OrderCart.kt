@@ -6,13 +6,13 @@ import com.lfergt.controltienda.domain.model.OrderItem
 import com.lfergt.controltienda.domain.model.PaymentMethod
 import com.lfergt.controltienda.domain.model.Product
 
-data class CartLine(val key: String, val item: OrderItem)
+data class CartLine(val key: String, val item: OrderItem) : java.io.Serializable
 
 /** Carrito inmutable de "Crear orden". */
 data class OrderCart(
     val lines: List<CartLine> = emptyList(),
     private val manualSeq: Int = 0,
-) {
+) : java.io.Serializable {
     val totalCents: Long get() = lines.sumOf { it.item.subtotalCents }
     val isEmpty: Boolean get() = lines.isEmpty()
     val itemCount: Int get() = lines.size

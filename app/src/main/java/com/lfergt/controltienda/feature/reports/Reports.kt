@@ -50,7 +50,9 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -132,7 +134,7 @@ class ReportsViewModel @Inject constructor(savedState: SavedStateHandle, context
 @Composable
 fun ReportsScreen(onBack: () -> Unit, onReport: (ReportType) -> Unit, viewModel: ReportsViewModel = hiltViewModel()) {
     val header by viewModel.header.collectAsStateWithLifecycle()
-    BackScaffold(title = header.name, onBack = onBack) { padding ->
+    BackScaffold(title = "Reportes", subtitle = header.name, onBack = onBack) { padding ->
         when {
             !header.loaded -> LoadingBox(Modifier.padding(padding))
             !header.access.can(Permission.REPORTS) -> NoAccess(Modifier.padding(padding))
@@ -199,6 +201,7 @@ class ReportDetailViewModel @Inject constructor(
     val share = shareChannel.receiveAsFlow()
 
     fun setPreset(preset: RangePreset) {
+        if (_state.value.loading) return
         val today = LocalDate.now()
         val (from, to) = when (preset) {
             RangePreset.TODAY -> today to today
@@ -211,13 +214,14 @@ class ReportDetailViewModel @Inject constructor(
         _state.update { it.copy(preset = preset, from = from, to = to, table = null) }
     }
 
-    fun setCustomRange(from: LocalDate, to: LocalDate) = _state.update { it.copy(preset = RangePreset.CUSTOM, from = from, to = to, table = null) }
-    fun setGrouping(g: PeriodGrouping) = _state.update { it.copy(grouping = g, table = null) }
-    fun setLimit(limit: Int) = _state.update { it.copy(limit = limit, table = null) }
+    fun setCustomRange(from: LocalDate, to: LocalDate) = _state.update { if (it.loading) it else it.copy(preset = RangePreset.CUSTOM, from = from, to = to, table = null) }
+    fun setGrouping(g: PeriodGrouping) = _state.update { if (it.loading) it else it.copy(grouping = g, table = null) }
+    fun setLimit(limit: Int) = _state.update { if (it.loading) it else it.copy(limit = limit, table = null) }
 
     /** Aplicar filtros y generar el reporte (las ventas se consultan al servidor o a la caché local). */
     fun apply() {
         val s = _state.value
+        if (s.loading) return
         val data = catalog.value
         val store = data.header.store ?: return
         val zone = ZoneId.systemDefault()
@@ -330,6 +334,7 @@ private fun Filters(state: ReportUiState, viewModel: ReportDetailViewModel, onCu
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(RangePreset.entries) { preset ->
                     FilterChip(
+                        enabled = !state.loading,
                         selected = state.preset == preset,
                         onClick = { if (preset == RangePreset.CUSTOM) onCustom() else viewModel.setPreset(preset) },
                         label = { Text(preset.label) },
@@ -348,7 +353,7 @@ private fun Filters(state: ReportUiState, viewModel: ReportDetailViewModel, onCu
             Text("Agrupar por", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(PeriodGrouping.DAY to "Día", PeriodGrouping.WEEK to "Semana", PeriodGrouping.MONTH to "Mes").forEach { (g, label) ->
-                    FilterChip(selected = state.grouping == g, onClick = { viewModel.setGrouping(g) }, label = { Text(label) })
+                    FilterChip(enabled = !state.loading, selected = state.grouping == g, onClick = { viewModel.setGrouping(g) }, label = { Text(label) })
                 }
             }
         }
@@ -356,7 +361,7 @@ private fun Filters(state: ReportUiState, viewModel: ReportDetailViewModel, onCu
             Text("Cantidad de productos", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(10, 20, 50, 100).forEach { n ->
-                    FilterChip(selected = state.limit == n, onClick = { viewModel.setLimit(n) }, label = { Text("Top $n") })
+                    FilterChip(enabled = !state.loading, selected = state.limit == n, onClick = { viewModel.setLimit(n) }, label = { Text("Top $n") })
                 }
             }
         }
@@ -392,17 +397,32 @@ private fun cellText(cell: ReportCell, currency: String): String = when (cell) {
 @Composable
 private fun ReportTableView(table: ReportTable) {
     val scroll = rememberScrollState()
+    var page by remember(table) { mutableIntStateOf(0) }
+    val pageSize = 40
+    val pages = ((table.rows.size + pageSize - 1) / pageSize).coerceAtLeast(1)
     val widths: List<Dp> = table.columns.mapIndexed { i, c -> if (i == 0 && c.kind == ColumnKind.TEXT) 180.dp else 120.dp }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.padding(vertical = 8.dp)) {
             Text(table.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp))
+            table.totals?.let { totals ->
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Resumen del periodo", style = MaterialTheme.typography.titleMedium)
+                    totals.forEachIndexed { i, cell -> if (cell !is ReportCell.Text) Text("${table.columns[i].title}: ${cellText(cell, table.currency)}", style = MaterialTheme.typography.titleSmall) }
+                }
+            }
+            Text("${table.rows.size} filas · Desliza la tabla para ver todas las columnas", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp))
             TableRow(table.columns.map { it.title }, table, widths, scroll, header = true)
             HorizontalDivider()
             if (table.rows.isEmpty()) {
                 Text("Sin datos para los filtros seleccionados.", modifier = Modifier.padding(16.dp))
             }
-            table.rows.forEachIndexed { index, row ->
+            table.rows.drop(page * pageSize).take(pageSize).forEachIndexed { index, row ->
                 TableRow(row.map { cellText(it, table.currency) }, table, widths, scroll, zebra = index % 2 == 1)
+            }
+            if (pages > 1) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { page-- }, enabled = page > 0) { Text("Anterior") }
+                Text("${page + 1} / $pages")
+                TextButton(onClick = { page++ }, enabled = page + 1 < pages) { Text("Siguiente") }
             }
             table.totals?.let {
                 HorizontalDivider()

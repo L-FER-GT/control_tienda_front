@@ -34,6 +34,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+val LocalUpdater = androidx.compose.runtime.compositionLocalOf<UpdateViewModel?> { null }
+
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState
@@ -51,6 +53,8 @@ class UpdateViewModel @Inject constructor(
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state = _state.asStateFlow()
     private var checkedOnStart = false
+    private val _dialogVisible = MutableStateFlow(true)
+    val dialogVisible = _dialogVisible.asStateFlow()
 
     /** Al abrir la app: si no hay conexión o falla la consulta no se molesta al usuario. */
     fun checkOnStart() {
@@ -69,6 +73,7 @@ class UpdateViewModel @Inject constructor(
 
     /** Consulta pedida por el usuario desde Configuración. */
     fun check() {
+        _dialogVisible.value = true
         if (_state.value != UpdateState.Idle) return
         _state.value = UpdateState.Checking
         launchSafe(onError = { _state.value = UpdateState.Idle }) {
@@ -88,7 +93,8 @@ class UpdateViewModel @Inject constructor(
     }
 
     fun dismiss() {
-        if (_state.value !is UpdateState.Downloading) _state.value = UpdateState.Idle
+        if (_state.value is UpdateState.Downloading || _state.value is UpdateState.Ready) _dialogVisible.value = false
+        else _state.value = UpdateState.Idle
     }
 }
 
@@ -97,6 +103,8 @@ class UpdateViewModel @Inject constructor(
 fun UpdateDialogs(viewModel: UpdateViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val visible by viewModel.dialogVisible.collectAsStateWithLifecycle()
+    if (!visible) return
     when (val current = state) {
         is UpdateState.Available -> AlertDialog(
             onDismissRequest = viewModel::dismiss,
@@ -113,15 +121,16 @@ fun UpdateDialogs(viewModel: UpdateViewModel) {
             dismissButton = { TextButton(onClick = viewModel::dismiss) { Text("Más tarde") } },
         )
         is UpdateState.Downloading -> AlertDialog(
-            onDismissRequest = {},
+            onDismissRequest = viewModel::dismiss,
             title = { Text("Descargando ${current.update.version}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     LinearProgressIndicator(progress = { current.percent / 100f }, modifier = Modifier.fillMaxWidth())
                     Text("${current.percent} %")
+                    Text("Puedes seguir usando la app y consultar la descarga en Configuración.")
                 }
             },
-            confirmButton = {},
+            confirmButton = { TextButton(onClick = viewModel::dismiss) { Text("Seguir trabajando") } },
         )
         is UpdateState.Ready -> AlertDialog(
             onDismissRequest = viewModel::dismiss,

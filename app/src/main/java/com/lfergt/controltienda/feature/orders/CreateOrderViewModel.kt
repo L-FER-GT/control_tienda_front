@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.lfergt.controltienda.domain.usecase.CartLine
 
 /** Resultado del último escaneo, que se muestra debajo del cuadro. */
 sealed interface ScanFeedback {
@@ -45,7 +46,7 @@ data class CreateOrderState(
 
 @HiltViewModel
 class CreateOrderViewModel @Inject constructor(
-    savedState: SavedStateHandle,
+    private val savedState: SavedStateHandle,
     source: CatalogSource,
     private val createOrder: CreateOrderUseCase,
     private val clock: Clock,
@@ -53,8 +54,8 @@ class CreateOrderViewModel @Inject constructor(
 
     val storeId = savedState.toRoute<CreateOrderRoute>().storeId
 
-    private val cart = MutableStateFlow(OrderCart())
-    private val payment = MutableStateFlow(PaymentMethod.CASH)
+    private val cart = MutableStateFlow(savedState.get<OrderCart>("cartDraft") ?: OrderCart())
+    private val payment = MutableStateFlow(savedState.get<PaymentMethod>("paymentDraft") ?: PaymentMethod.CASH)
     private val scanMode = MutableStateFlow<ScanMode?>(null)
     private val feedback = MutableStateFlow<ScanFeedback?>(null)
     private val saving = MutableStateFlow(false)
@@ -70,7 +71,13 @@ class CreateOrderViewModel @Inject constructor(
         CreateOrderState(c, items, pay, mode, fb, busy)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CreateOrderState())
 
+    init {
+        viewModelScope.launch { cart.collect { savedState["cartDraft"] = it } }
+        viewModelScope.launch { payment.collect { savedState["paymentDraft"] = it } }
+    }
+
     fun openScanner(mode: ScanMode) {
+        if (saving.value) return
         debouncer.reset()
         feedback.value = null
         scanMode.value = mode
@@ -82,6 +89,7 @@ class CreateOrderViewModel @Inject constructor(
 
     /** Lectura continua: el producto se busca en la base local, así funciona sin conexión. */
     fun onScanned(code: ScannedCode) {
+        if (saving.value) return
         if (!debouncer.accept(code.value, clock.now())) return
         val data = catalog.value
         val product = data.products.firstOrNull { it.matchesCode(code.value) }
@@ -96,34 +104,50 @@ class CreateOrderViewModel @Inject constructor(
     }
 
     fun addProduct(product: Product) {
+        if (saving.value) return
         cart.update { it.addProduct(product, catalog.value.categoryName(product.categoryId)) }
     }
 
     /** Ítem manual: detalle, categoría, precio y cantidad. No toca el inventario. */
     fun addManual(description: String, categoryId: String?, unitPriceCents: Long, quantity: Double, unit: MeasureUnit) {
+        if (saving.value) return
         cart.update {
             it.addManual(description, categoryId, catalog.value.categoryName(categoryId), unitPriceCents, quantity, unit)
         }
         if (scanMode.value != null) feedback.value = null
     }
 
-    fun setQuantity(key: String, quantity: Double) = cart.update { it.setQuantity(key, quantity) }
-    fun remove(key: String) = cart.update { it.remove(key) }
+    fun setQuantity(key: String, quantity: Double) {
+        if (saving.value || !quantity.isFinite() || quantity <= 0) return
+        val line = cart.value.lines.firstOrNull { it.key == key } ?: return
+        if (!line.item.unit.allowsDecimals && quantity % 1.0 != 0.0) return
+        cart.update { it.setQuantity(key, quantity) }
+    }
+    fun remove(key: String) { if (!saving.value) cart.update { it.remove(key) } }
+    fun restoreLine(line: CartLine) {
+        if (!saving.value) cart.update { current ->
+            if (current.lines.any { it.key == line.key }) current else current.copy(lines = current.lines + line)
+        }
+    }
     fun setPayment(method: PaymentMethod) {
+        if (saving.value) return
         payment.value = method
     }
 
     fun clear() {
+        if (saving.value) return
         cart.value = OrderCart()
         feedback.value = null
     }
 
     fun submit() {
-        if (saving.value) return
+        if (saving.value || cart.value.isEmpty) return
+        val submittedCart = cart.value
+        val submittedPayment = payment.value
         saving.value = true
         viewModelScope.launch {
             try {
-                createOrder(storeId, cart.value, payment.value, catalog.value.header.currency)
+                createOrder(storeId, submittedCart, submittedPayment, catalog.value.header.currency)
                 cart.value = OrderCart()
                 payment.value = PaymentMethod.CASH
                 feedback.value = null

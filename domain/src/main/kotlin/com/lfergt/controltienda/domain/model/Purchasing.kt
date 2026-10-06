@@ -9,7 +9,7 @@ data class Supplier(
     val email: String?,
     val address: String?,
     val notes: String?,
-) {
+) : java.io.Serializable {
     val isOthers: Boolean get() = id == OTHERS_ID
 
     companion object {

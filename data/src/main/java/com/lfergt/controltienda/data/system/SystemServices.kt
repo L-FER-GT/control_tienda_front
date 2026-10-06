@@ -14,7 +14,11 @@ import com.lfergt.controltienda.domain.error.DomainError
 import com.lfergt.controltienda.domain.error.userMessage
 import com.lfergt.controltienda.domain.model.UserProfile
 import com.lfergt.controltienda.domain.port.ConnectivityMonitor
+import com.lfergt.controltienda.domain.port.LastStorePreference
 import com.lfergt.controltienda.domain.port.SyncMonitor
+import com.lfergt.controltienda.domain.port.SyncStatus
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.awaitClose
@@ -25,13 +29,33 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** SharedPreferences: se lee de forma síncrona al crear la actividad, antes de dibujar la primera pantalla. */
+@Singleton
+class LastStorePreferenceImpl @Inject constructor(@ApplicationContext context: Context) : LastStorePreference {
+    private val prefs = context.getSharedPreferences("navigation", Context.MODE_PRIVATE)
+    override fun get(uid: String): String? = prefs.getString(key(uid), null)
+    override fun set(uid: String, storeId: String?) {
+        if (get(uid) == storeId) return
+        prefs.edit().apply { if (storeId == null) remove(key(uid)) else putString(key(uid), storeId) }.apply()
+    }
+    private fun key(uid: String) = "last_store_$uid"
+}
+
 @Singleton
 class SyncMonitorImpl @Inject constructor() : SyncMonitor {
+    private val current = MutableStateFlow(SyncStatus())
+    override val status: Flow<SyncStatus> = current
+    override fun queueChanged(pending: Int) { current.update { it.copy(pending = pending) } }
+    override fun syncing(active: Boolean) { current.update { it.copy(syncing = active) } }
+    override fun completed(at: Long) { current.update { it.copy(lastSyncedAt = at) } }
+    override fun reset() { current.value = SyncStatus() }
+    override fun acknowledgeFailure() { current.update { it.copy(lastFailure = null) } }
     private val events = MutableSharedFlow<String>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val failures: Flow<String> = events
 
     override fun report(error: Throwable) {
         Log.w("Sync", "Cambio rechazado por el servidor", error)
+        current.update { it.copy(lastFailure = error.userMessage()) }
         events.tryEmit("No se pudo sincronizar un cambio: ${error.userMessage()}")
     }
 }

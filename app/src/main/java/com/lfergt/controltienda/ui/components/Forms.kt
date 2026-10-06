@@ -1,5 +1,13 @@
 package com.lfergt.controltienda.ui.components
 
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.Close
 import android.content.Context
 import android.Manifest
 import android.content.pm.PackageManager
@@ -78,7 +86,9 @@ fun TextInput(
     trailing: (@Composable () -> Unit)? = null,
     prefix: String? = null,
     enabled: Boolean = true,
+    imeAction: ImeAction = ImeAction.Next,
 ) {
+    val focus = LocalFocusManager.current
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -87,7 +97,8 @@ fun TextInput(
         isError = error != null,
         supportingText = (error ?: supporting)?.let { { Text(it) } },
         singleLine = singleLine,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = if (singleLine) imeAction else ImeAction.Default),
+        keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Next) }, onDone = { focus.clearFocus() }),
         trailingIcon = trailing,
         prefix = prefix?.let { { Text("$it ") } },
         enabled = enabled,
@@ -144,10 +155,14 @@ fun String.toDecimalOrNull(): Double? = trim().replace(',', '.').toDoubleOrNull(
 
 @Composable
 fun SearchInput(value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
+    val focus = LocalFocusManager.current
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        placeholder = { Text(placeholder) },
+        label = { Text(placeholder) },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+        trailingIcon = { if (value.isNotEmpty()) IconButton(onClick = { onValueChange("") }) { Icon(Icons.Outlined.Close, "Limpiar búsqueda") } },
         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
         singleLine = true,
         shape = MaterialTheme.shapes.large,
@@ -222,7 +237,10 @@ fun rememberPhotoPicker(onPicked: (Uri) -> Unit): PhotoPickerState {
     val currentOnPicked by rememberUpdatedState(onPicked)
     var pendingCameraUri by rememberSaveable { mutableStateOf<String?>(null) }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let(currentOnPicked)
+        uri?.let {
+            runCatching { context.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            currentOnPicked(it)
+        }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val uri = pendingCameraUri
@@ -296,7 +314,7 @@ fun PhotoField(
             onClick = { showSheet = true },
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.fillMaxWidth().aspectRatio(aspectRatio).clip(MaterialTheme.shapes.large),
+            modifier = Modifier.fillMaxWidth().aspectRatio(aspectRatio).clip(MaterialTheme.shapes.large).semantics { contentDescription = "Cambiar $label" },
         ) {
             Box(contentAlignment = Alignment.Center) {
                 when {
@@ -304,12 +322,12 @@ fun PhotoField(
                     currentPath != null -> StorageImage(currentPath, null, Modifier.fillMaxSize())
                     else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Outlined.AddAPhoto, null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.outline)
-                        Text("Toca para agregar", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        Text("Toca para agregar", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
-        Text("Máximo 5 MB. Las fotos se comprimen automáticamente.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+        Text("Máximo 5 MB. Las fotos se comprimen automáticamente.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     if (showSheet) PhotoSourceSheet(onDismiss = { showSheet = false }, picker = picker)
 }

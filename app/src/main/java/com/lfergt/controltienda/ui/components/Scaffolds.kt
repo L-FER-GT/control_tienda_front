@@ -26,6 +26,17 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.ErrorOutline
+import com.lfergt.controltienda.domain.port.SyncStatus
+import com.lfergt.controltienda.ui.common.formatDateTime
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
@@ -40,6 +51,8 @@ val LocalSnackbar = compositionLocalOf { SnackbarHostState() }
 
 /** true cuando no hay conexión: las barras superiores muestran un ícono de nube tachada. */
 val LocalOffline = compositionLocalOf { false }
+val LocalSyncStatus = compositionLocalOf { SyncStatus() }
+val LocalAcknowledgeSync = compositionLocalOf<() -> Unit> { {} }
 
 /**
  * Pantalla dentro de una tienda: arriba, anclado, solo el título (nombre de la tienda o del módulo)
@@ -58,7 +71,7 @@ fun BackScaffold(
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.imePadding(),
         topBar = {
             TopAppBar(
                 title = {
@@ -96,19 +109,46 @@ fun BackScaffold(
 
 @Composable
 fun OfflineIcon() {
-    if (LocalOffline.current) {
-        Icon(
-            Icons.Outlined.CloudOff,
-            contentDescription = "Sin conexión",
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.padding(horizontal = 8.dp),
-        )
+    val offline = LocalOffline.current
+    val status = LocalSyncStatus.current
+    val acknowledge = LocalAcknowledgeSync.current
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val label = when {
+        status.lastFailure != null -> "Revisar error de sincronización"
+        offline -> "Sin conexión: ${status.pending} cambios pendientes"
+        status.syncing -> "Sincronizando ${status.pending} cambios"
+        status.pending > 0 -> "${status.pending} cambios pendientes"
+        else -> "Sin cambios pendientes"
     }
+    IconButton(onClick = { expanded = true }) {
+        Icon(when { status.lastFailure != null -> Icons.Outlined.ErrorOutline; offline -> Icons.Outlined.CloudOff; status.pending > 0 -> Icons.Outlined.CloudUpload; else -> Icons.Outlined.CloudDone },
+            label, tint = if (status.lastFailure != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+    }
+    if (expanded) AlertDialog(onDismissRequest = { expanded = false },
+        title = { Text("Conexión y cambios") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(label)
+            Text(if (offline) "Los cambios guardados en este dispositivo se enviarán cuando vuelva la conexión." else "Los cambios pendientes se envían automáticamente. Mantén la conexión para completar el envío.")
+            status.lastSyncedAt?.let { Text("Último envío confirmado: ${formatDateTime(it)}") }
+            status.lastFailure?.let { Text(it, color = MaterialTheme.colorScheme.error); Text("Un cambio rechazado puede haberse revertido. Revisa el registro antes de volver a guardarlo.") }
+        } },
+        confirmButton = { TextButton(onClick = { acknowledge(); expanded = false }) { Text("Entendido") } },
+    )
 }
 
 @Composable
 fun LoadingBox(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+}
+
+@Composable
+fun UnavailableState(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    EmptyState(
+        Icons.Outlined.CloudOff, "No pudimos abrir este registro",
+        "Puede que ya no exista, no tengas acceso o aún no esté disponible en este dispositivo. Comprueba la conexión y vuelve a abrirlo.",
+        modifier,
+        action = { TextButton(onClick = onBack) { Text("Volver") } },
+    )
 }
 
 @Composable
