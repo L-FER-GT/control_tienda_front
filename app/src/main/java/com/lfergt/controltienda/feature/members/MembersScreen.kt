@@ -51,6 +51,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -77,11 +79,13 @@ fun MembersScreen(onBack: () -> Unit, viewModel: MembersViewModel = hiltViewMode
     val invite by viewModel.invite.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(0) }
     var editing by remember { mutableStateOf<Membership?>(null) }
+    val savingPermissions by viewModel.savingPermissions.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(viewModel) { viewModel.permissionsSaved.collect { editing = null } }
     val role = if (tab == 0) StoreRole.EMPLOYEE else StoreRole.CLIENT
     CollectMessages(viewModel)
 
     BackScaffold(
-        title = state.header.name,
+        title = "Empleados y clientes", subtitle = state.header.name,
         onBack = onBack,
         floatingActionButton = {
             if (state.header.access.can(Permission.MEMBERS)) {
@@ -148,8 +152,9 @@ fun MembersScreen(onBack: () -> Unit, viewModel: MembersViewModel = hiltViewMode
     editing?.let { member ->
         PermissionsSheet(
             member = member,
-            onDismiss = { editing = null },
-            onSave = { viewModel.setPermissions(member, it); editing = null },
+            onDismiss = { if (!savingPermissions) editing = null },
+            busy = savingPermissions,
+            onSave = { viewModel.setPermissions(member, it) },
         )
     }
 }
@@ -182,7 +187,7 @@ private fun MemberRow(member: Membership, isMe: Boolean, onActive: (Boolean) -> 
                         if (member.role == StoreRole.EMPLOYEE) {
                             IconButton(onClick = onPermissions) { Icon(Icons.Outlined.Tune, contentDescription = "Permisos") }
                         }
-                        Switch(checked = member.active, onCheckedChange = onActive)
+                        Switch(checked = member.active, onCheckedChange = onActive, modifier = Modifier.semantics { contentDescription = "Habilitar acceso de ${member.displayName}" })
                     }
                 }
             },
@@ -218,7 +223,7 @@ private fun InviteDialog(
         modifier = Modifier.widthIn(max = 560.dp),
         title = { Text("Invitar a la tienda") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     listOf(StoreRole.EMPLOYEE, StoreRole.CLIENT).forEachIndexed { i, r ->
                         SegmentedButton(
@@ -245,6 +250,8 @@ private fun InviteDialog(
                     supportingText = { if (state.byCode) Text("${state.query.length}/10") },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                state.searchError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (state.sending) Text("Enviando invitación…")
                 Box(Modifier.heightIn(max = 280.dp)) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(state.results, key = { it.uid }) { profile ->
@@ -275,7 +282,7 @@ private fun InviteDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PermissionsSheet(member: Membership, onDismiss: () -> Unit, onSave: (Set<Permission>) -> Unit) {
+private fun PermissionsSheet(member: Membership, onDismiss: () -> Unit, busy: Boolean, onSave: (Set<Permission>) -> Unit) {
     var selected by remember(member.uid) { mutableStateOf(member.permissions) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -300,14 +307,15 @@ private fun PermissionsSheet(member: Membership, onDismiss: () -> Unit, onSave: 
                     supportingContent = { Text(permission.description) },
                     trailingContent = {
                         Checkbox(
+                            modifier = Modifier.semantics { contentDescription = permission.label },
                             checked = permission in selected,
                             onCheckedChange = { checked -> selected = if (checked) selected + permission else selected - permission },
                         )
                     },
                 )
             }
-            Button(onClick = { onSave(selected) }, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-                Text("Guardar permisos")
+            Button(enabled = !busy, onClick = { onSave(selected) }, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                Text(if (busy) "Guardando…" else "Guardar permisos")
             }
         }
     }

@@ -17,6 +17,9 @@ import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.StoreContext
 import com.lfergt.controltienda.ui.common.StoreHeader
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.CancellationException
+import com.lfergt.controltienda.domain.error.userMessage
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,6 +31,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.receiveAsFlow
 import javax.inject.Inject
 
 data class MembersState(
@@ -44,6 +48,7 @@ data class InviteState(
     val byCode: Boolean = true,
     val query: String = "",
     val searching: Boolean = false,
+    val searchError: String? = null,
     val results: List<PublicProfile> = emptyList(),
     val searched: Boolean = false,
     val sending: Boolean = false,
@@ -76,7 +81,7 @@ class MembersViewModel @Inject constructor(
         @OptIn(FlowPreview::class)
         viewModelScope.launch {
             _invite.debounce(400).distinctUntilChanged { a, b -> a.query == b.query && a.byCode == b.byCode && a.open == b.open }
-                .collect { s -> if (s.open && !s.byCode) searchByName(s.query) }
+                .collectLatest { s -> if (s.open) { if (s.byCode && s.query.length == UserCode.LENGTH) searchByCode(s.query) else if (!s.byCode) searchByName(s.query) } }
         }
     }
 
@@ -87,16 +92,16 @@ class MembersViewModel @Inject constructor(
 
     fun onQuery(text: String) {
         val clean = if (_invite.value.byCode) text.filter(Char::isDigit).take(UserCode.LENGTH) else text
-        _invite.update { it.copy(query = clean, searched = false, results = if (it.byCode) emptyList() else it.results) }
-        if (_invite.value.byCode && clean.length == UserCode.LENGTH) searchByCode(clean)
+        _invite.update { it.copy(query = clean, searched = false, searchError = null, searching = false, results = emptyList()) }
     }
 
-    private fun searchByCode(code: String) {
-        _invite.update { it.copy(searching = true) }
-        launchSafe(onError = { _invite.update { s -> s.copy(searching = false) } }) {
+    private suspend fun searchByCode(code: String) {
+        _invite.update { it.copy(searching = true, searchError = null) }
+        try {
             val found = users.findByCode(code)
-            _invite.update { it.copy(searching = false, searched = true, results = listOfNotNull(found)) }
-        }
+            if (_invite.value.query == code && _invite.value.byCode) _invite.update { it.copy(searching = false, searched = true, results = listOfNotNull(found)) }
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { _invite.update { it.copy(searching = false, searchError = e.userMessage()) } }
     }
 
     private suspend fun searchByName(query: String) {
@@ -107,9 +112,10 @@ class MembersViewModel @Inject constructor(
         _invite.update { it.copy(searching = true) }
         try {
             val found = users.searchByName(query)
-            _invite.update { it.copy(searching = false, searched = true, results = found) }
+            if (_invite.value.query == query && !_invite.value.byCode) _invite.update { it.copy(searching = false, searched = true, results = found) }
+        } catch (e: CancellationException) { throw e
         } catch (e: Exception) {
-            _invite.update { it.copy(searching = false) }
+            _invite.update { it.copy(searching = false, results = emptyList(), searchError = e.userMessage()) }
         }
     }
 
@@ -135,8 +141,17 @@ class MembersViewModel @Inject constructor(
         message(if (active) "${member.displayName} fue habilitado" else "${member.displayName} fue deshabilitado")
     }
 
-    fun setPermissions(member: Membership, permissions: Set<Permission>) = launchSafe {
+    val savingPermissions = MutableStateFlow(false)
+    private val permissionsSavedChannel = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+    val permissionsSaved = permissionsSavedChannel.receiveAsFlow()
+    fun setPermissions(member: Membership, permissions: Set<Permission>) {
+        if (savingPermissions.value) return
+        savingPermissions.value = true
+        launchSafe(onError = { savingPermissions.value = false }) {
         members.setPermissions(storeId, member.uid, permissions)
         message("Permisos actualizados")
+        savingPermissions.value = false
+        permissionsSavedChannel.send(Unit)
+        }
     }
 }

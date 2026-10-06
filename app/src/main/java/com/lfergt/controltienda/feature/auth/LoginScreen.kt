@@ -144,7 +144,7 @@ fun LoginScreen(onLoggedIn: () -> Unit, viewModel: LoginViewModel = hiltViewMode
                     onValueChange = viewModel::onPassword,
                     label = { Text("Contraseña") },
                     isError = "password" in state.fieldErrors,
-                    supportingText = state.fieldErrors["password"]?.let { { Text(it) } },
+                    supportingText = (state.fieldErrors["password"] ?: if (state.registering) "Mínimo $MIN_NEW_PASSWORD_LENGTH caracteres" else null)?.let { { Text(it) } },
                     singleLine = true,
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -170,9 +170,10 @@ fun LoginScreen(onLoggedIn: () -> Unit, viewModel: LoginViewModel = hiltViewMode
                     TextButton(onClick = viewModel::forgotPassword) { Text("¿Olvidaste tu contraseña?") }
                 }
 
+                if (context.getString(R.string.default_web_client_id).isNotBlank()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     HorizontalDivider(Modifier.weight(1f))
-                    Text("  o  ", color = MaterialTheme.colorScheme.outline)
+                    Text("  o  ", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     HorizontalDivider(Modifier.weight(1f))
                 }
                 OutlinedButton(
@@ -189,6 +190,7 @@ fun LoginScreen(onLoggedIn: () -> Unit, viewModel: LoginViewModel = hiltViewMode
                     Text("G", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.size(10.dp))
                     Text("Continuar con Google")
+                }
                 }
                 TextButton(onClick = viewModel::toggleMode) {
                     Text(if (state.registering) "¿Ya tienes cuenta? Inicia sesión" else "¿No tienes cuenta? Regístrate")

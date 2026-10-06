@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+const val MIN_NEW_PASSWORD_LENGTH = 8
+
 data class LoginUiState(
     val registering: Boolean = false,
     val name: String = "",
@@ -47,7 +49,8 @@ class LoginViewModel @Inject constructor(
     private fun validate(s: LoginUiState): Map<String, String> = buildMap {
         if (s.registering && s.name.isBlank()) put("name", "Ingresa tu nombre")
         if (!s.email.contains("@") || !s.email.contains(".")) put("email", "Correo no válido")
-        if (s.password.length < 6) put("password", "Mínimo 6 caracteres")
+        if (s.password.isBlank()) put("password", "Ingresa tu contraseña")
+        else if (s.registering && s.password.length < MIN_NEW_PASSWORD_LENGTH) put("password", "Mínimo $MIN_NEW_PASSWORD_LENGTH caracteres")
     }
 
     fun submit() {

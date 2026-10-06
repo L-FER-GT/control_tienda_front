@@ -52,7 +52,15 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.flow.map
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.lfergt.controltienda.ui.components.HistoryPeriod
+import com.lfergt.controltienda.ui.components.HistoryFilters
+import com.lfergt.controltienda.feature.catalog.normalizedSearch
 import javax.inject.Inject
+import com.lfergt.controltienda.ui.components.UnavailableState
 
 data class MySalesState(
     val header: StoreHeader = StoreHeader(),
@@ -82,8 +90,11 @@ class MySalesViewModel @Inject constructor(
 @Composable
 fun MySalesScreen(onBack: () -> Unit, onDetail: (String) -> Unit, viewModel: MySalesViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    var period by rememberSaveable { mutableStateOf(HistoryPeriod.ALL) }
     val currency = state.header.currency
-    BackScaffold(title = state.header.name, onBack = onBack) { padding ->
+    val visible = state.orders.filter { order -> period.includes(order.createdAt) && normalizedSearch(order.displayNumber + " " + order.items.joinToString { it.description }).contains(normalizedSearch(query)) }
+    BackScaffold(title = "Mis ventas", subtitle = state.header.name, onBack = onBack) { padding ->
         when {
             !state.loaded -> LoadingBox(Modifier.padding(padding))
             !state.header.access.isStaff -> NoAccess(Modifier.padding(padding))
@@ -94,6 +105,8 @@ fun MySalesScreen(onBack: () -> Unit, onDetail: (String) -> Unit, viewModel: MyS
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                item { HistoryFilters(query, { query = it }, period, { period = it }, visible.size) }
+                if (visible.isEmpty()) item { Text("Sin ventas para estos filtros.") }
                 item {
                     Card(
                         Modifier.widthIn(max = 720.dp).fillMaxWidth(),
@@ -108,7 +121,7 @@ fun MySalesScreen(onBack: () -> Unit, onDetail: (String) -> Unit, viewModel: MyS
                         }
                     }
                 }
-                items(state.orders, key = { it.id }) { order ->
+                items(visible, key = { it.id }) { order ->
                     Card(Modifier.widthIn(max = 720.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -143,7 +156,8 @@ class SaleDetailViewModel @Inject constructor(
 ) : BaseViewModel() {
     private val route = savedState.toRoute<SaleDetailRoute>()
     val state = orders.observeOrder(route.storeId, route.orderId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        .map { true to it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false to null)
 }
 
 /** Detalle: arriba "Mis ventas"; al centro el ID de la orden, la fecha y hora, el detalle y el total. */
@@ -151,9 +165,13 @@ class SaleDetailViewModel @Inject constructor(
 fun SaleDetailScreen(onBack: () -> Unit, viewModel: SaleDetailViewModel = hiltViewModel()) {
     val order by viewModel.state.collectAsStateWithLifecycle()
     BackScaffold(title = "Mis ventas", onBack = onBack) { padding ->
-        val o = order
-        if (o == null) {
+        val o = order.second
+        if (!order.first) {
             LoadingBox(Modifier.padding(padding))
+            return@BackScaffold
+        }
+        if (o == null) {
+            UnavailableState(onBack, Modifier.padding(padding))
             return@BackScaffold
         }
         LazyColumn(
@@ -166,7 +184,7 @@ fun SaleDetailScreen(onBack: () -> Unit, viewModel: SaleDetailViewModel = hiltVi
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 12.dp)) {
                     Text(o.displayNumber, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     Text(formatDateTime(o.createdAt), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("ID: ${o.id}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text("ID: ${o.id}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (o.pendingSync) PendingSyncLabel()
                 }
             }
@@ -184,7 +202,7 @@ fun SaleDetailScreen(onBack: () -> Unit, viewModel: SaleDetailViewModel = hiltVi
                     Text("${item.unit.formatQuantity(item.quantity)} ${item.unit.symbol}", Modifier.weight(0.8f), style = MaterialTheme.typography.bodyMedium)
                     Column(Modifier.weight(2.4f)) {
                         Text(item.description, style = MaterialTheme.typography.bodyMedium)
-                        if (item.manual) Text("Ítem manual", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        if (item.manual) Text("Ítem manual", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(Money.format(item.unitPriceCents, o.currency), Modifier.weight(1.2f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodyMedium)
                     Text(Money.format(item.subtotalCents, o.currency), Modifier.weight(1.2f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodyMedium)

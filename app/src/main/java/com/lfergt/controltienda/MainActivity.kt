@@ -42,6 +42,11 @@ import com.lfergt.controltienda.ui.components.LocalSnackbar
 import com.lfergt.controltienda.ui.theme.ControlTiendaTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import com.lfergt.controltienda.feature.update.LocalUpdater
+import com.lfergt.controltienda.ui.components.LocalSyncStatus
+import com.lfergt.controltienda.ui.components.LocalAcknowledgeSync
+import com.lfergt.controltienda.feature.auth.MIN_NEW_PASSWORD_LENGTH
+import com.lfergt.controltienda.domain.port.SyncStatus
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -93,7 +98,7 @@ class MainActivity : ComponentActivity() {
             onDismissRequest = {}, title = { Text("Nueva contraseña") },
             text = { OutlinedTextField(value=newPassword,onValueChange={newPassword=it},label={Text("Mínimo 8 caracteres")},singleLine=true,
                 visualTransformation=PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password)) },
-            confirmButton = { TextButton(enabled=!savingPassword && newPassword.length>=8,onClick={
+            confirmButton = { TextButton(enabled=!savingPassword && newPassword.length>=MIN_NEW_PASSWORD_LENGTH,onClick={
                 recoveryScope.launch {
                     savingPassword=true
                     try { supabase.updatePassword(newPassword); recovering=false; newPassword=""; auth.signOut(); snackbar.showSnackbar("Contraseña actualizada. Inicia sesión.") }
@@ -102,6 +107,7 @@ class MainActivity : ComponentActivity() {
                 }
             }) { Text("Guardar") } },
         )
+        val syncStatus by sync.status.collectAsStateWithLifecycle(initialValue = SyncStatus())
         val online by connectivity.isOnline.collectAsStateWithLifecycle(initialValue = true)
         val session by auth.session.collectAsStateWithLifecycle(initialValue = auth.currentSession())
         var wasOffline by remember { mutableStateOf(false) }
@@ -138,8 +144,12 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        CompositionLocalProvider(LocalSnackbar provides snackbar, LocalOffline provides !online) {
+        CompositionLocalProvider(LocalSnackbar provides snackbar, LocalOffline provides !online,
+            LocalSyncStatus provides syncStatus,
+            LocalAcknowledgeSync provides sync::acknowledgeFailure,
+            LocalUpdater provides updater) {
             AppNavHost(navController = navController, startDestination = start)
+            com.lfergt.controltienda.ui.common.CollectMessages(updater)
             UpdateDialogs(updater)
         }
     }

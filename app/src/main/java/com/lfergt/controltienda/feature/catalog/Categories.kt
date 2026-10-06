@@ -78,6 +78,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import javax.inject.Inject
 
 // ------------------------------------------------------------------ lista de categorías
@@ -91,10 +95,20 @@ class CategoriesViewModel @Inject constructor(
     val storeId = savedState.toRoute<CategoriesRoute>().storeId
     val state = source.observe(storeId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CatalogData())
 
-    fun save(categoryId: String?, name: String, photo: String?) = launchSafe {
+    private val _saving = MutableStateFlow(false)
+    val saving = _saving.asStateFlow()
+    private val savedChannel = Channel<Unit>(Channel.CONFLATED)
+    val saved = savedChannel.receiveAsFlow()
+    fun save(categoryId: String?, name: String, photo: String?) {
+        if (_saving.value) return
+        _saving.value = true
+        launchSafe(onError = { _saving.value = false }) {
         if (name.isBlank()) throw com.lfergt.controltienda.domain.error.DomainError.Validation("name", "El nombre es obligatorio")
         catalog.saveCategory(storeId, categoryId, name, photo?.let { LocalFile(it) })
         message(if (categoryId == null) "Categoría creada" else "Categoría actualizada")
+        _saving.value = false
+        savedChannel.send(Unit)
+        }
     }
 }
 
@@ -102,11 +116,13 @@ class CategoriesViewModel @Inject constructor(
 fun CategoriesScreen(onBack: () -> Unit, onCategory: (String) -> Unit, viewModel: CategoriesViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var creating by rememberSaveable { mutableStateOf(false) }
+    val saving by viewModel.saving.collectAsStateWithLifecycle()
+    LaunchedEffect(viewModel) { viewModel.saved.collect { creating = false } }
     val allowed = state.header.access.can(Permission.MANAGE_CATEGORIES)
     CollectMessages(viewModel)
 
     BackScaffold(
-        title = state.header.name,
+        title = "Categorías", subtitle = state.header.name,
         onBack = onBack,
         floatingActionButton = {
             if (allowed) FloatingActionButton(onClick = { creating = true }) { Icon(Icons.Outlined.Add, "Nueva categoría") }
@@ -121,15 +137,16 @@ fun CategoriesScreen(onBack: () -> Unit, onCategory: (String) -> Unit, viewModel
     if (creating) {
         CategoryDialog(
             initial = null,
-            onDismiss = { creating = false },
-            onSave = { name, photo -> creating = false; viewModel.save(null, name, photo) },
+            onDismiss = { if (!saving) creating = false },
+            busy = saving,
+            onSave = { name, photo -> viewModel.save(null, name, photo) },
         )
     }
 }
 
 /** Crear o editar una categoría: nombre y foto. */
 @Composable
-fun CategoryDialog(initial: Category?, onDismiss: () -> Unit, onSave: (String, String?) -> Unit) {
+fun CategoryDialog(initial: Category?, onDismiss: () -> Unit, busy: Boolean = false, onSave: (String, String?) -> Unit) {
     var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
     var photo by rememberSaveable { mutableStateOf<String?>(null) }
     AlertDialog(
@@ -137,12 +154,12 @@ fun CategoryDialog(initial: Category?, onDismiss: () -> Unit, onSave: (String, S
         modifier = Modifier.widthIn(max = 520.dp),
         title = { Text(if (initial == null) "Nueva categoría" else "Editar categoría") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextInput(name, { name = it }, "Nombre")
                 PhotoField(initial?.photoPath, photo, { photo = it.toString() }, label = "Foto (opcional)")
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name, photo) }, enabled = name.isNotBlank()) { Text("Guardar") } },
+        confirmButton = { TextButton(onClick = { onSave(name, photo) }, enabled = !busy && name.isNotBlank()) { Text(if (busy) "Guardando…" else "Guardar") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
     )
 }
@@ -176,9 +193,19 @@ class CategoryDetailViewModel @Inject constructor(
         message("\"${product.name}\" quedó sin categoría")
     }
 
-    fun edit(name: String, photo: String?) = launchSafe {
+    private val _saving = MutableStateFlow(false)
+    val saving = _saving.asStateFlow()
+    private val savedChannel = Channel<Unit>(Channel.CONFLATED)
+    val saved = savedChannel.receiveAsFlow()
+    fun edit(name: String, photo: String?) {
+        if (_saving.value) return
+        _saving.value = true
+        launchSafe(onError = { _saving.value = false }) {
         catalog.saveCategory(storeId, categoryId, name, photo?.let { LocalFile(it) })
         message("Categoría actualizada")
+        _saving.value = false
+        savedChannel.send(Unit)
+        }
     }
 
     fun delete() = launchSafe {
@@ -197,8 +224,11 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
     var picker by rememberSaveable { mutableStateOf<PickerSource?>(null) }
     var pendingConflicts by remember { mutableStateOf<Pair<List<Product>, List<Product>>?>(null) }
     var editing by rememberSaveable { mutableStateOf(false) }
+    val saving by viewModel.saving.collectAsStateWithLifecycle()
+    LaunchedEffect(viewModel) { viewModel.saved.collect { editing = false } }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var removing by remember { mutableStateOf<Product?>(null) }
+    var detail by remember { mutableStateOf<Product?>(null) }
     val category = state.categories.firstOrNull { it.id == viewModel.categoryId }
     val allowed = state.header.access.can(Permission.MANAGE_CATEGORIES)
     CollectMessages(viewModel)
@@ -248,13 +278,16 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
                         }
                     }
                     items(products, key = { it.id }) { product ->
+                      Column {
                         ProductTile(
                             product = product,
                             currency = state.header.currency,
                             showStock = false,
                             extra = if (viewModel.isAll) state.categoryName(product.categoryId) ?: "Sin categoría" else null,
-                            onClick = { if (!viewModel.isAll) removing = product },
+                            onClick = { detail = product },
                         )
+                        if (!viewModel.isAll) TextButton(onClick = { removing = product }) { Text("Quitar de categoría") }
+                      }
                     }
                 }
             }
@@ -298,6 +331,7 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
         )
     }
 
+    detail?.let { ProductDetailDialog(it, state.header.currency, state.categoryName(it.categoryId), false) { detail = null } }
     removing?.let { product ->
         ConfirmDialog(
             title = "Quitar de la categoría",
@@ -308,7 +342,7 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
         )
     }
     if (editing && category != null) {
-        CategoryDialog(category, onDismiss = { editing = false }, onSave = { name, photo -> editing = false; viewModel.edit(name, photo) })
+        CategoryDialog(category, onDismiss = { if (!saving) editing = false }, busy = saving, onSave = { name, photo -> viewModel.edit(name, photo) })
     }
     if (confirmDelete) {
         ConfirmDialog(

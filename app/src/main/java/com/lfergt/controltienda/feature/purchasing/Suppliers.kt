@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.lfergt.controltienda.ui.components.rememberGuardedBack
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -69,12 +70,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.lfergt.controltienda.ui.components.UnavailableState
 
 data class SuppliersState(val header: StoreHeader = StoreHeader(), val suppliers: List<Supplier> = emptyList())
 
 @HiltViewModel
 class SuppliersViewModel @Inject constructor(
-    savedState: SavedStateHandle,
+    private val savedState: SavedStateHandle,
     context: StoreContext,
     suppliers: SupplierRepository,
 ) : BaseViewModel() {
@@ -90,7 +92,7 @@ fun SuppliersScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: Su
     var query by rememberSaveable { mutableStateOf("") }
     val allowed = state.header.access.can(Permission.SUPPLIERS)
     BackScaffold(
-        title = state.header.name,
+        title = "Proveedores", subtitle = state.header.name,
         onBack = onBack,
         floatingActionButton = {
             if (allowed) ExtendedFloatingActionButton(onClick = { onEdit(null) }, icon = { Icon(Icons.Outlined.Add, null) }, text = { Text("Nuevo proveedor") })
@@ -111,6 +113,7 @@ fun SuppliersScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: Su
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     item { SearchInput(query, { query = it }, "Buscar por empresa, RUC o asesor", Modifier.widthIn(max = 720.dp)) }
+                    if (list.isEmpty()) item { Text("Sin resultados. Prueba otro nombre o limpia la búsqueda.") }
                     items(list, key = { it.id }) { supplier ->
                         Card(
                             onClick = { if (!supplier.isOthers) onEdit(supplier.id) },
@@ -144,6 +147,8 @@ fun SuppliersScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: Su
 // ------------------------------------------------------------------ editor
 
 data class SupplierForm(
+    val unavailable: Boolean = false,
+    val saving: Boolean = false,
     val loaded: Boolean = false,
     val companyName: String = "",
     val ruc: String = "",
@@ -153,11 +158,11 @@ data class SupplierForm(
     val address: String = "",
     val notes: String = "",
     val errors: Map<String, String> = emptyMap(),
-)
+) : java.io.Serializable
 
 @HiltViewModel
 class SupplierEditorViewModel @Inject constructor(
-    savedState: SavedStateHandle,
+    private val savedState: SavedStateHandle,
     context: StoreContext,
     private val suppliers: SupplierRepository,
 ) : BaseViewModel() {
@@ -165,15 +170,23 @@ class SupplierEditorViewModel @Inject constructor(
     val storeId = route.storeId
     val supplierId = route.supplierId
     val header = context.header(storeId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StoreHeader())
-    private val _form = MutableStateFlow(SupplierForm(loaded = supplierId == null))
+    private val _form = MutableStateFlow(savedState.get<SupplierForm>("editorDraft")?.copy(saving = false) ?: SupplierForm(loaded = supplierId == null))
     val form = _form.asStateFlow()
+    private var baseline: SupplierForm? = savedState["editorBaseline"]
+    val dirty: Boolean get() = baseline?.let { _form.value.copy(saving = false, errors = emptyMap()) != it.copy(saving = false, errors = emptyMap()) } ?: false
+    private fun rememberBaseline() {
+        if (baseline == null) { baseline = _form.value; savedState["editorBaseline"] = baseline }
+    }
+
     private val doneChannel = Channel<Unit>(Channel.CONFLATED)
     val done = doneChannel.receiveAsFlow()
 
     init {
-        if (supplierId != null) viewModelScope.launch {
+        viewModelScope.launch { _form.collect { savedState["editorDraft"] = it.copy(saving = false) } }
+        if (supplierId != null && !_form.value.loaded) viewModelScope.launch {
             val s = suppliers.observeSuppliers(storeId).first().firstOrNull { it.id == supplierId }
             _form.value = SupplierForm(
+                unavailable = s == null,
                 loaded = true,
                 companyName = s?.companyName ?: "",
                 ruc = s?.ruc ?: "",
@@ -183,13 +196,15 @@ class SupplierEditorViewModel @Inject constructor(
                 address = s?.address ?: "",
                 notes = s?.notes ?: "",
             )
-        }
+            rememberBaseline()
+        } else rememberBaseline()
     }
 
     fun update(block: (SupplierForm) -> SupplierForm) = _form.update { block(it).copy(errors = emptyMap()) }
 
     fun save() {
         val f = _form.value
+        if (f.saving) return
         val errors = buildMap {
             if (f.companyName.isBlank()) put("company", "La empresa es obligatoria")
             if (f.ruc.isNotBlank() && !Supplier.isValidRuc(f.ruc)) put("ruc", "El RUC debe tener 11 dígitos (10, 15, 16, 17 o 20…)")
@@ -199,7 +214,8 @@ class SupplierEditorViewModel @Inject constructor(
             _form.update { it.copy(errors = errors) }
             return
         }
-        launchSafe {
+        _form.update { it.copy(saving = true) }
+        launchSafe(onError = { _form.update { f -> f.copy(saving = false) } }) {
             suppliers.saveSupplier(
                 storeId,
                 Supplier(supplierId ?: "", f.companyName, f.ruc, f.phone, f.contactName, f.email, f.address, f.notes),
@@ -225,12 +241,13 @@ fun SupplierEditorScreen(onBack: () -> Unit, viewModel: SupplierEditorViewModel 
     BackScaffold(
         title = "Proveedores",
         subtitle = if (viewModel.supplierId == null) "Nuevo proveedor" else form.companyName,
-        onBack = onBack,
+        onBack = rememberGuardedBack(viewModel.dirty, form.saving, onBack),
         actions = {
             if (viewModel.supplierId != null) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.DeleteOutline, "Eliminar") }
         },
     ) { padding ->
         when {
+            form.unavailable -> UnavailableState(onBack, Modifier.padding(padding))
             !form.loaded || !header.loaded -> LoadingBox(Modifier.padding(padding))
             !header.access.can(Permission.SUPPLIERS) -> NoAccess(Modifier.padding(padding))
             else -> Column(Modifier.padding(padding).verticalScroll(rememberScrollState())) {
@@ -245,7 +262,7 @@ fun SupplierEditorScreen(onBack: () -> Unit, viewModel: SupplierEditorViewModel 
                     TextInput(form.email, { v -> viewModel.update { it.copy(email = v) } }, "Correo", error = form.errors["email"], keyboardType = KeyboardType.Email)
                     TextInput(form.address, { v -> viewModel.update { it.copy(address = v) } }, "Dirección", singleLine = false)
                     TextInput(form.notes, { v -> viewModel.update { it.copy(notes = v) } }, "Notas (días de visita, condiciones, etc.)", singleLine = false)
-                    Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Guardar") }
+                    Button(onClick = viewModel::save, enabled = !form.saving, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(if (form.saving) "Guardando…" else "Guardar") }
                 }
             }
         }

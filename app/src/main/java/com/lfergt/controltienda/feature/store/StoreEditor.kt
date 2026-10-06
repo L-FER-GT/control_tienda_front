@@ -19,9 +19,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.lfergt.controltienda.ui.components.rememberGuardedBack
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -52,8 +55,10 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.lfergt.controltienda.ui.components.UnavailableState
 
 data class StoreEditorState(
+    val unavailable: Boolean = false,
     val loading: Boolean = false,
     val saving: Boolean = false,
     val name: String = "",
@@ -63,25 +68,35 @@ data class StoreEditorState(
     val photoPath: String? = null,
     val pickedPhoto: String? = null,
     val errors: Map<String, String> = emptyMap(),
-)
+) : java.io.Serializable
 
 @HiltViewModel
 class StoreEditorViewModel @Inject constructor(
-    savedState: SavedStateHandle,
+    private val savedState: SavedStateHandle,
     private val stores: StoreRepository,
     private val saveStore: SaveStoreUseCase,
 ) : BaseViewModel() {
 
     val storeId: String? = savedState.toRoute<StoreEditorRoute>().storeId
-    private val _state = MutableStateFlow(StoreEditorState(loading = storeId != null))
+    private val _state = MutableStateFlow(savedState.get<StoreEditorState>("editorDraft")?.copy(saving = false) ?: StoreEditorState(loading = storeId != null))
     val state = _state.asStateFlow()
+    private var baseline: StoreEditorState? = savedState["editorBaseline"]
+    val dirty: Boolean get() = baseline?.let { _state.value.copy(saving = false, errors = emptyMap()) != it.copy(saving = false, errors = emptyMap()) } ?: false
+    private fun rememberBaseline() {
+        if (baseline == null) { baseline = _state.value; savedState["editorBaseline"] = baseline }
+    }
+
 
     private val doneChannel = Channel<String>(Channel.CONFLATED)
     val done = doneChannel.receiveAsFlow()
 
     init {
-        if (storeId != null) viewModelScope.launch {
-            val store = stores.observeStore(storeId).filterNotNull().first()
+        viewModelScope.launch { _state.collect { savedState["editorDraft"] = it.copy(saving = false) } }
+        if (storeId != null && _state.value.loading) viewModelScope.launch {
+            val store = stores.observeStore(storeId).first() ?: run {
+                _state.update { it.copy(loading = false, unavailable = true) }
+                return@launch
+            }
             _state.update {
                 it.copy(
                     loading = false,
@@ -92,7 +107,8 @@ class StoreEditorViewModel @Inject constructor(
                     photoPath = store.photoPath,
                 )
             }
-        }
+            rememberBaseline()
+        } else rememberBaseline()
     }
 
     fun onName(v: String) = _state.update { it.copy(name = v, errors = it.errors - "name") }
@@ -131,7 +147,11 @@ fun StoreEditorScreen(onBack: () -> Unit, onSaved: (String, Boolean) -> Unit, vi
     CollectMessages(viewModel)
     LaunchedEffect(Unit) { viewModel.done.collect { onSaved(it, creating) } }
 
-    BackScaffold(title = if (creating) "Nueva tienda" else "Editar tienda", onBack = onBack) { padding ->
+    BackScaffold(title = if (creating) "Nueva tienda" else "Editar tienda", onBack = rememberGuardedBack(viewModel.dirty, state.saving, onBack)) { padding ->
+        if (state.unavailable) {
+            UnavailableState(onBack, Modifier.padding(padding))
+            return@BackScaffold
+        }
         if (state.loading) {
             LoadingBox(Modifier.padding(padding))
             return@BackScaffold
@@ -171,7 +191,7 @@ fun StoreEditorScreen(onBack: () -> Unit, onSaved: (String, Boolean) -> Unit, vi
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Switch(checked = state.isPublic, onCheckedChange = viewModel::onPublic)
+                        Switch(checked = state.isPublic, onCheckedChange = viewModel::onPublic, modifier = Modifier.semantics { contentDescription = "Tienda pública" })
                     }
                 }
                 Button(

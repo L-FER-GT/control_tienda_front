@@ -25,9 +25,22 @@ interface ConnectivityMonitor {
  * Los cambios hechos sin conexión se confirman más tarde. Si el servidor los rechaza
  * (p. ej. el usuario perdió un permiso), el mensaje llega por aquí para avisarle.
  */
+data class SyncStatus(
+    val pending: Int = 0,
+    val syncing: Boolean = false,
+    val lastSyncedAt: Long? = null,
+    val lastFailure: String? = null,
+)
+
 interface SyncMonitor {
     val failures: Flow<String>
+    val status: Flow<SyncStatus> get() = kotlinx.coroutines.flow.flowOf(SyncStatus())
     fun report(error: Throwable)
+    fun queueChanged(pending: Int) {}
+    fun syncing(active: Boolean) {}
+    fun completed(at: Long) {}
+    fun reset() {}
+    fun acknowledgeFailure() {}
 }
 
 /** Versiones de la app publicadas fuera de una tienda de apps (Releases de GitHub). */

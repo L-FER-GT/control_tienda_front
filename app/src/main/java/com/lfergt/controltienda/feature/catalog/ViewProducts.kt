@@ -39,6 +39,8 @@ import com.lfergt.controltienda.ui.components.SearchInput
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import com.lfergt.controltienda.ui.components.Dropdown
+import androidx.compose.material3.Text
 import javax.inject.Inject
 
 // ------------------------------------------------------------------ categorías (primer nivel)
@@ -101,17 +103,24 @@ fun ViewProductsScreen(onBack: () -> Unit, viewModel: ViewProductsViewModel = hi
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var detail by remember { mutableStateOf<Product?>(null) }
-    val categoryName = if (viewModel.categoryId == Category.ALL_ID) "Todos" else state.categoryName(viewModel.categoryId) ?: ""
+    var selectedCategory by rememberSaveable { mutableStateOf(viewModel.categoryId) }
+    val categoryName = if (selectedCategory == Category.ALL_ID) "Todos" else state.categoryName(selectedCategory) ?: ""
     val showStock = state.header.access.can(Permission.VIEW_STOCK)
 
-    BackScaffold(title = "Ver productos", subtitle = categoryName, onBack = onBack) { padding ->
+    BackScaffold(title = "Productos", subtitle = state.header.name, onBack = onBack) { padding ->
         if (!state.loaded) {
             LoadingBox(Modifier.padding(padding))
             return@BackScaffold
         }
-        val products = CategoryRules.productsOf(viewModel.categoryId, state.products).search(query)
+        if (!state.header.access.active) { NoAccess(Modifier.padding(padding)); return@BackScaffold }
+        val products = CategoryRules.productsOf(selectedCategory, state.products).search(query)
         AdaptiveGrid(minCellSize = 150.dp, modifier = Modifier.padding(padding), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 32.dp)) {
-            item(span = { GridItemSpan(maxLineSpan) }) { SearchInput(query, { query = it }, "Buscar producto") }
+            item(span = { GridItemSpan(maxLineSpan) }) { SearchInput(query, { query = it }, "Buscar por nombre o código") }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Dropdown("Categoría", listOf(Category.ALL_ID) + state.categories.map { it.id }, selectedCategory,
+                    { if (it == Category.ALL_ID) "Todos los productos" else state.categoryName(it) ?: "Sin categoría" }, { selectedCategory = it })
+            }
+            item(span = { GridItemSpan(maxLineSpan) }) { Text("${products.size} productos · $categoryName") }
             if (products.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     EmptyState(Icons.Outlined.Inventory2, "No hay productos", if (query.isBlank()) "Esta categoría aún no tiene productos." else "Prueba con otro nombre.")

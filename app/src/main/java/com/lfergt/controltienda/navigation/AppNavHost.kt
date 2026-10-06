@@ -43,7 +43,7 @@ import com.lfergt.controltienda.feature.store.StoreLandingScreen
 
 /** Ruta de cada opción del landing de la tienda. */
 fun StoreOption.route(storeId: String): Any = when (this) {
-    StoreOption.VIEW_PRODUCTS -> ViewCategoriesRoute(storeId)
+    StoreOption.VIEW_PRODUCTS -> ViewProductsRoute(storeId, com.lfergt.controltienda.domain.model.Category.ALL_ID)
     StoreOption.CREATE_ORDER -> CreateOrderRoute(storeId)
     StoreOption.MY_SALES -> MySalesRoute(storeId)
     StoreOption.MANAGE_PRODUCTS -> ManageProductsRoute(storeId)

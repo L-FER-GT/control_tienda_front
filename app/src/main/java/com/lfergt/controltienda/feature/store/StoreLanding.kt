@@ -79,7 +79,10 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.compose.material3.Button
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import javax.inject.Inject
+import com.lfergt.controltienda.ui.components.OfflineIcon
 
 data class LandingState(
     val header: StoreHeader = StoreHeader(),
@@ -157,7 +160,12 @@ fun StoreLandingScreen(
                     modifier = modifier,
                     contentPadding = PaddingValues(16.dp),
                 ) {
-                    items(state.options) { option ->
+                    if (header.access.isStaff) item(span = { GridItemSpan(maxLineSpan) }) {
+                        Button(onClick = { onOption(StoreOption.CREATE_ORDER) }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Nueva venta", modifier = Modifier.padding(8.dp))
+                        }
+                    }
+                    items(state.options.filter { !header.access.isStaff || it != StoreOption.CREATE_ORDER }) { option ->
                         OptionTile(
                             label = option.label,
                             icon = option.icon,
@@ -181,7 +189,7 @@ fun StoreLandingScreen(
         } else {
             Column(Modifier.fillMaxSize().padding(padding)) {
                 // Foto, nombre y dirección anclados arriba; solo las opciones se desplazan.
-                StorePhotoHeader(header, onBack, if (canEdit) onEdit else null, Modifier.fillMaxWidth().height(if (landscape) 180.dp else 220.dp), topInset = true)
+                StorePhotoHeader(header, onBack, if (canEdit) onEdit else null, Modifier.fillMaxWidth().height(if (header.access.isStaff) 120.dp else if (landscape) 180.dp else 220.dp), topInset = true)
                 StoreTitle(header)
                 body(Modifier.weight(1f).navigationBarsPadding())
             }
@@ -219,11 +227,7 @@ private fun StorePhotoHeader(header: StoreHeader, onBack: () -> Unit, onEdit: ((
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
             }
             Row {
-                if (LocalOffline.current) {
-                    FilledTonalIconButton(onClick = {}, colors = buttonColors, shape = CircleShape) {
-                        Icon(Icons.Outlined.CloudOff, contentDescription = "Sin conexión")
-                    }
-                }
+                OfflineIcon()
                 if (onEdit != null) {
                     FilledTonalIconButton(onClick = onEdit, colors = buttonColors, shape = CircleShape) {
                         Icon(Icons.Outlined.Edit, contentDescription = "Editar tienda")

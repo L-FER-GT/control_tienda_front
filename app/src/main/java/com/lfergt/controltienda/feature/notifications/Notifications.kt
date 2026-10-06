@@ -170,7 +170,7 @@ private fun NotificationCard(
                     Text(n.title, style = MaterialTheme.typography.titleSmall, fontWeight = if (n.read) FontWeight.Medium else FontWeight.Bold)
                     n.fromName?.let { Text("De: $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
                     Text(n.body, style = MaterialTheme.typography.bodyMedium)
-                    Text(formatDateTime(n.createdAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    Text(formatDateTime(n.createdAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Eliminar") }
             }
@@ -190,11 +190,11 @@ private fun NotificationCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        AssistChip(onClick = {}, label = { Text("Aceptada") })
+                        Text("Aceptada", color = MaterialTheme.colorScheme.primary)
                         Button(onClick = onOpenStore) { Text("Ir a la tienda") }
                     }
-                    InvitationStatus.REJECTED -> AssistChip(onClick = {}, label = { Text("Rechazada") })
-                    InvitationStatus.CANCELLED -> AssistChip(onClick = {}, label = { Text("Cancelada por el administrador") })
+                    InvitationStatus.REJECTED -> Text("Rechazada")
+                    InvitationStatus.CANCELLED -> Text("Cancelada por el administrador")
                 }
             }
         }

@@ -135,11 +135,11 @@ fun OptionTile(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.aspectRatio(1.15f),
+        modifier = modifier,
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
-        Box(Modifier.fillMaxSize().padding(12.dp)) {
+        Box(Modifier.fillMaxWidth().padding(16.dp)) {
             Column(
                 Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -207,7 +207,7 @@ fun ProductTile(
                     fontWeight = FontWeight.Bold,
                 )
                 if (showStock) StockLabel(product)
-                if (extra != null) Text(extra, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                if (extra != null) Text(extra, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -217,9 +217,9 @@ fun ProductTile(
 fun StockLabel(product: Product) {
     val stock = product.stock
     val (text, color) = when {
-        stock == null -> "Stock ilimitado" to MaterialTheme.colorScheme.outline
-        stock <= 0 -> "Stock: ${product.unit.formatQuantity(stock)}" to StatusColors.danger
-        product.stockAlert != null && stock <= product.stockAlert!! -> "Stock: ${product.unit.formatQuantity(stock)}" to StatusColors.warning
+        stock == null -> "Sin control de stock" to MaterialTheme.colorScheme.onSurfaceVariant
+        stock <= 0 -> "Agotado · stock: ${product.unit.formatQuantity(stock)}" to StatusColors.danger
+        product.stockAlert != null && stock <= product.stockAlert!! -> "Stock bajo: ${product.unit.formatQuantity(stock)}" to StatusColors.warning
         else -> "Stock: ${product.unit.formatQuantity(stock)}" to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Text(text, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium)
