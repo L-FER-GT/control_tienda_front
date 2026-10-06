@@ -18,7 +18,7 @@ Origen: segunda revisión UX/UI (después de v1.1.0). El usuario aprobó los pun
 | B | Ventas: + reemplazado por barras/QR/mano y búsqueda fija (1), escáner (11), agregar a mano (12), Mis ventas (9), detalle de venta (10) | Hecho; compilado; número de venta probado; revisión visual con sesión pendiente |
 | C | Inicio de tienda agrupado y «Productos» único (4), catálogo con chips y lista por defecto (6), categorías (14), editor de producto (13) | Hecho; probado (`LandingSectionsTest`, filtro de stock) |
 | D | Compras (15), reportes automáticos (7), empleados (17), títulos (20), configuración y stock bajo | Hecho; probado (`ReportDetailViewModelTest`, `InviteSearchTest`, diferencia de factura) |
-| E | Pruebas nuevas y ajustadas, compilación, release local, revisión en emulador, commits, v1.2.0 y despliegue | Pruebas y release local hechos; despliegue en curso |
+| E | Pruebas nuevas y ajustadas, compilación, release local, revisión en emulador, commits, v1.2.0 y despliegue | Hecho: v1.2.0 publicada (CI de develop y Release Android exitosos) |
 
 **Pruebas previstas:** plurales, fechas cercanas, visibilidad del indicador de sincronización, secciones del inicio de tienda, invitación con un solo campo (código o nombre), reporte generado automáticamente y regenerado al cambiar el periodo, diferencia entre factura y productos, número de venta sin ceros. Se ajusta `ReportGeneratorTest` por el texto «Productos sin costo registrado».
 
@@ -30,6 +30,7 @@ Origen: segunda revisión UX/UI (después de v1.1.0). El usuario aprobó los pun
 - Pruebas: `:domain:test :data:testDebugUnitTest :app:testDebugUnitTest` → app 53 (antes 34), data 14, domain 36, sin fallos. `ReportGeneratorTest` ajustado a «Productos sin costo registrado».
 - Limitación de pruebas: en JVM `toRoute` no decodifica el segundo argumento de la ruta. El VM de reportes ahora usa «Ventas por periodo» si el tipo no es válido (en producción las rutas siempre llevan un nombre válido), y la prueba cubre la generación automática con ese tipo.
 - Release local `VERSION_NAME=1.2.0` (R8) correcta; instalada sobre 1.1.0 en `ct_test`, arranca sin fallos. Sin sesión en el emulador: no se revisaron las pantallas internas en dispositivo.
+- Publicación: commits `90d039c` y `0e0c7ba` en develop, merge `e47a54c` en master, develop sincronizado y tag anotado `v1.2.0`. CI de develop y «Release Android» exitosos; APK `control-tienda-v1.2.0.apk` en GitHub Releases. Pendiente: recorrer las pantallas con una cuenta real en el teléfono.
 
 **Para continuar tras una interrupción**
 
