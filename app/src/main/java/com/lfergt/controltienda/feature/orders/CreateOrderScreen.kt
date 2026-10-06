@@ -1,7 +1,5 @@
 package com.lfergt.controltienda.feature.orders
 
-import android.media.AudioManager
-import android.media.ToneGenerator
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -48,11 +46,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,6 +71,7 @@ import com.lfergt.controltienda.domain.model.Permission
 import com.lfergt.controltienda.domain.usecase.CartLine
 import com.lfergt.controltienda.feature.scanner.CodeScanner
 import com.lfergt.controltienda.feature.scanner.ScanMode
+import com.lfergt.controltienda.feature.scanner.ScanSounds
 import com.lfergt.controltienda.ui.common.CollectMessages
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.ConfirmDialog
@@ -272,15 +269,13 @@ private fun ScanOverlay(
     onRegister: (String) -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
-    val tone = remember { runCatching { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70) }.getOrNull() }
-    DisposableEffect(Unit) { onDispose { tone?.release() } }
     LaunchedEffect(state.feedback?.seq) {
         when (state.feedback) {
             is ScanFeedback.Added -> {
+                ScanSounds.ok()
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                tone?.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
             }
-            is ScanFeedback.Unknown -> tone?.startTone(ToneGenerator.TONE_PROP_NACK, 200)
+            is ScanFeedback.Unknown -> ScanSounds.unknown()
             null -> Unit
         }
     }

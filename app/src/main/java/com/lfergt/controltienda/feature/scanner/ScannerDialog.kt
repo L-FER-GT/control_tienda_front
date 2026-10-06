@@ -22,19 +22,28 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
-/** Escáner a pantalla completa que se cierra con el primer código leído. */
+/** Escáner a pantalla completa que se cierra con el primer código leído (con pitido y vibración). */
 @Composable
 fun ScannerDialog(mode: ScanMode, onResult: (ScannedCode) -> Unit, onDismiss: () -> Unit) {
     val delivered = remember(mode) { java.util.concurrent.atomic.AtomicBoolean(false) }
     var manual by rememberSaveable { mutableStateOf(false) }
     var code by rememberSaveable { mutableStateOf("") }
+    val haptics = LocalHapticFeedback.current
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize()) {
-            if (!manual) CodeScanner(mode = mode, onDetected = { code -> if (delivered.compareAndSet(false, true)) onResult(code) })
+            if (!manual) CodeScanner(mode = mode, onDetected = { code ->
+                if (delivered.compareAndSet(false, true)) {
+                    ScanSounds.ok()
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onResult(code)
+                }
+            })
             FilledTonalIconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(12.dp)) {
                 Icon(Icons.Outlined.Close, contentDescription = "Cerrar")
             }

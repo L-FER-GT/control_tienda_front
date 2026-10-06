@@ -86,23 +86,31 @@ data class OrderCart(
 }
 
 /**
- * Evita sumar el mismo código varias veces por la lectura continua de la cámara:
- * mientras el código siga a la vista (detecciones separadas por menos de [cooldownMs]) se ignora.
- * Para agregar otra unidad hay que retirar el producto del cuadro y volver a enfocarlo.
+ * Evita registrar dos veces una lectura, ya que la cámara analiza varios cuadros por segundo:
+ * - Después de cada lectura aceptada se ignora todo durante [pauseMs], sea el código que sea.
+ * - Un código aceptado que sigue a la vista (visto hace menos de [visibleMs]) no se vuelve a sumar,
+ *   aunque entre medio la cámara haya leído otro (una lectura errónea o un código vecino).
+ *   Para agregar otra unidad hay que retirar el producto del cuadro y volver a enfocarlo.
  */
-class ScanDebouncer(private val cooldownMs: Long = 1500) {
-    private var lastCode: String? = null
-    private var lastSeenAt: Long = 0
+class ScanDebouncer(private val pauseMs: Long = 1_000, private val visibleMs: Long = 1_500) {
+    private var lastAcceptedAt: Long? = null
+    private val inView = HashMap<String, Long>()
 
     fun accept(code: String, now: Long): Boolean {
-        val sameAndRecent = code == lastCode && now - lastSeenAt < cooldownMs
-        lastCode = code
-        lastSeenAt = now
-        return !sameAndRecent
+        inView.entries.removeAll { now - it.value >= visibleMs }
+        if (code in inView) {
+            inView[code] = now
+            return false
+        }
+        val accepted = lastAcceptedAt
+        if (accepted != null && now - accepted < pauseMs) return false
+        inView[code] = now
+        lastAcceptedAt = now
+        return true
     }
 
     fun reset() {
-        lastCode = null
-        lastSeenAt = 0
+        lastAcceptedAt = null
+        inView.clear()
     }
 }

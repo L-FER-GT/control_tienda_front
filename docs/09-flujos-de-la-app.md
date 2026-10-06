@@ -74,12 +74,17 @@ botones **Aceptar** / **Rechazar**; al aceptar aparece **Ir a la tienda**.
 1. Botón **+** (esquina inferior derecha) → *Escanear código de barras*, *Escanear QR* o *Introducción manual*.
 2. Al escanear se dibuja un cuadro de enfoque; debajo, con margen, un recuadro blanco con letras
    negras muestra el nombre y precio del producto leído. Leer el mismo código de forma continua no lo
-   duplica: para sumar otra unidad se retira y se vuelve a enfocar.
-3. Código no registrado: *Ingresar manual* o *Registrar* el producto (si tiene permiso).
+   duplica, aunque entre medio la cámara lea otro código: para sumar otra unidad se retira y se vuelve
+   a enfocar. Entre dos lecturas pasa al menos 1 segundo, aunque sean productos distintos.
+3. Código no registrado: suena un tono grave y se ofrece *Ingresar manual* o *Registrar* el producto
+   (si tiene permiso).
 4. Manual: detalle, categoría, precio y cantidad (unidades, kilos, litros, paquetes…). No afecta inventario.
 5. Resumen editable, total, método de pago (informativo) y **Registrar venta**.
 6. Funciona sin conexión: la venta queda "Pendiente" y al sincronizar el servidor le asigna el
    número correlativo y descuenta el stock.
+
+Cada lectura exitosa, en cualquier módulo (Crear orden, Gestionar productos, editor de producto y
+recepciones), suena con un pitido corto de lector de caja y vibra. El sonido usa el volumen multimedia.
 
 ## Categorías
 

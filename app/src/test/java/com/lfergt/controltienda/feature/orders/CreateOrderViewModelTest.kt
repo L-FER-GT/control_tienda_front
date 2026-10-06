@@ -80,6 +80,23 @@ class CreateOrderViewModelTest {
     }
 
     @Test
+    fun `entre dos lecturas hay al menos un segundo, aunque sean productos distintos`() = runTest {
+        val vm = viewModel()
+        vm.state.test {
+            skipItems(1)
+            vm.openScanner(ScanMode.ANY)
+            now = 0; vm.onScanned(ScannedCode("7751271011324", isQr = false))
+            now = 500; vm.onScanned(ScannedCode("QR-PAN", isQr = true))
+            assertEquals(1, expectMostRecentItem().cart.itemCount)
+            now = 1_000; vm.onScanned(ScannedCode("QR-PAN", isQr = true))
+            val state = expectMostRecentItem()
+            assertEquals(2, state.cart.itemCount)
+            assertEquals(1.0, state.cart.lines.first { it.item.productId == "leche" }.item.quantity, 0.0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `un código desconocido no modifica la orden`() = runTest {
         val vm = viewModel()
         vm.state.test {

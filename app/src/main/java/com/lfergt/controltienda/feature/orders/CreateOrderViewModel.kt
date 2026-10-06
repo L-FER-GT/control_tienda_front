@@ -58,7 +58,8 @@ class CreateOrderViewModel @Inject constructor(
     private val scanMode = MutableStateFlow<ScanMode?>(null)
     private val feedback = MutableStateFlow<ScanFeedback?>(null)
     private val saving = MutableStateFlow(false)
-    private val debouncer = ScanDebouncer(cooldownMs = 1_500)
+    /** Un segundo entre dos lecturas; un producto que sigue a la vista no se vuelve a sumar. */
+    private val debouncer = ScanDebouncer(pauseMs = 1_000, visibleMs = 1_500)
     private var seq = 0L
 
     private val catalog = source.observe(storeId).stateIn(viewModelScope, SharingStarted.Eagerly, CatalogData())

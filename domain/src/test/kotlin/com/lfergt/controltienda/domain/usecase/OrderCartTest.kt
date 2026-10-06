@@ -58,12 +58,38 @@ class OrderCartTest {
 
     @Test
     fun `el debouncer ignora lecturas continuas del mismo código`() {
-        val debouncer = ScanDebouncer(cooldownMs = 1000)
+        val debouncer = ScanDebouncer(pauseMs = 1000, visibleMs = 1500)
         assertTrue(debouncer.accept("775", now = 0))
         assertFalse(debouncer.accept("775", now = 300))
-        assertFalse(debouncer.accept("775", now = 1200)) // sigue a la vista: la ventana se desliza
-        assertTrue(debouncer.accept("775", now = 2500)) // se retiró y volvió a enfocar
-        assertTrue(debouncer.accept("999", now = 2600))
+        assertFalse(debouncer.accept("775", now = 1600)) // sigue a la vista: la ventana se desliza
+        assertTrue(debouncer.accept("775", now = 3200)) // se retiró y volvió a enfocar
+        assertTrue(debouncer.accept("999", now = 4300))
+    }
+
+    @Test
+    fun `el debouncer espera un segundo entre dos lecturas aunque sean códigos distintos`() {
+        val debouncer = ScanDebouncer(pauseMs = 1000, visibleMs = 1500)
+        assertTrue(debouncer.accept("775", now = 0))
+        assertFalse(debouncer.accept("999", now = 600))
+        assertTrue(debouncer.accept("999", now = 1000)) // el otro producto sigue enfocado: se acepta al terminar la pausa
+    }
+
+    @Test
+    fun `una lectura intercalada de otro código no vuelve a sumar el producto que sigue a la vista`() {
+        val debouncer = ScanDebouncer(pauseMs = 1000, visibleMs = 1500)
+        assertTrue(debouncer.accept("775", now = 0))
+        assertFalse(debouncer.accept("775", now = 900))
+        assertTrue(debouncer.accept("77", now = 1100)) // lectura errónea: otro valor
+        assertFalse(debouncer.accept("775", now = 1300)) // antes se volvía a sumar
+        assertFalse(debouncer.accept("775", now = 2500))
+    }
+
+    @Test
+    fun `reiniciar el debouncer permite leer de inmediato`() {
+        val debouncer = ScanDebouncer(pauseMs = 1000, visibleMs = 1500)
+        assertTrue(debouncer.accept("775", now = 0))
+        debouncer.reset()
+        assertTrue(debouncer.accept("775", now = 100))
     }
 
     @Test
