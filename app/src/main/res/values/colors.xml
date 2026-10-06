@@ -2,4 +2,6 @@
 <resources>
     <!-- Azul del logo: fondo del ícono adaptativo, del splash y del logo en el login. -->
     <color name="logo_background">#004BE4</color>
+    <!-- Fondo de la ventana: igual a colorScheme.background de Theme.kt (oscuro en values-night). -->
+    <color name="window_background">#FAF8FF</color>
 </resources>
