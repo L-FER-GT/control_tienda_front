@@ -8,7 +8,7 @@ import com.lfergt.controltienda.domain.model.Product
 
 data class CartLine(val key: String, val item: OrderItem) : java.io.Serializable
 
-/** Carrito inmutable de "Crear orden". */
+/** Carrito inmutable de "Nueva venta". */
 data class OrderCart(
     val lines: List<CartLine> = emptyList(),
     private val manualSeq: Int = 0,

@@ -34,7 +34,7 @@ class CreateOrderUseCase @Inject constructor(
     private val clock: Clock,
 ) {
     suspend operator fun invoke(storeId: String, cart: OrderCart, payment: PaymentMethod, currency: String): String {
-        if (cart.isEmpty) throw DomainError.Validation(null, "Agrega al menos un producto a la orden")
+        if (cart.isEmpty) throw DomainError.Validation(null, "Agrega al menos un producto a la venta")
         if (cart.lines.any { it.item.quantity <= 0 }) throw DomainError.Validation(null, "Hay cantidades inválidas")
         return orders.createOrder(storeId, cart.toDraft(payment, currency, clock.now()))
     }

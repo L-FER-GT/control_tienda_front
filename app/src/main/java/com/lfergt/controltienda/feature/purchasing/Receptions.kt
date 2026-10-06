@@ -37,7 +37,7 @@ import com.lfergt.controltienda.navigation.ReceptionsRoute
 import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.StoreContext
 import com.lfergt.controltienda.ui.common.StoreHeader
-import com.lfergt.controltienda.ui.common.formatDate
+import com.lfergt.controltienda.ui.common.formatDay
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.EmptyState
 import com.lfergt.controltienda.ui.components.LoadingBox
@@ -54,6 +54,7 @@ import com.lfergt.controltienda.ui.components.HistoryPeriod
 import com.lfergt.controltienda.ui.components.HistoryFilters
 import com.lfergt.controltienda.feature.catalog.normalizedSearch
 import javax.inject.Inject
+import com.lfergt.controltienda.ui.common.plural
 
 data class ReceptionsState(val header: StoreHeader = StoreHeader(), val receptions: List<Reception> = emptyList())
 
@@ -77,10 +78,10 @@ fun ReceptionsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: R
     val visible = state.receptions.filter { r -> period.includes(r.receivedAt) && normalizedSearch(r.supplierName + " " + r.notes.orEmpty() + " " + r.lines.joinToString { it.productName }).contains(normalizedSearch(query)) }
     val allowed = state.header.access.can(Permission.RECEPTIONS)
     BackScaffold(
-        title = "Recepciones", subtitle = state.header.name,
+        title = "Compras", subtitle = state.header.name,
         onBack = onBack,
         floatingActionButton = {
-            if (allowed) ExtendedFloatingActionButton(onClick = { onEdit(null) }, icon = { Icon(Icons.Outlined.Add, null) }, text = { Text("Registrar recepción") })
+            if (allowed) ExtendedFloatingActionButton(onClick = { onEdit(null) }, icon = { Icon(Icons.Outlined.Add, null) }, text = { Text("Registrar compra") })
         },
     ) { padding ->
         when {
@@ -88,7 +89,7 @@ fun ReceptionsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: R
             !allowed -> NoAccess(Modifier.padding(padding))
             state.receptions.isEmpty() -> EmptyState(
                 Icons.Outlined.MoveToInbox,
-                "Sin recepciones",
+                "Sin compras",
                 "Registra la mercadería que llega: suma stock y guarda el costo de compra.",
                 Modifier.padding(padding),
             )
@@ -99,7 +100,7 @@ fun ReceptionsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: R
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 item { HistoryFilters(query, { query = it }, period, { period = it }, visible.size) }
-                if (visible.isEmpty()) item { Text("Sin recepciones para estos filtros.") }
+                if (visible.isEmpty()) item { Text("Sin compras para estos filtros.") }
                 items(visible, key = { it.id }) { r ->
                     Card(
                         onClick = { onEdit(r.id) },
@@ -110,14 +111,14 @@ fun ReceptionsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit, viewModel: R
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(r.supplierName, style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    "${formatDate(r.receivedAt)} · ${r.lines.size} productos · por ${r.createdByName}",
+                                    "${formatDay(r.receivedAt)} · ${plural(r.lines.size, "producto", "productos")} · por ${r.createdByName}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 if (r.invoicePhotos.isNotEmpty()) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Icon(Icons.Outlined.PhotoLibrary, null, tint = MaterialTheme.colorScheme.outline)
-                                        Text("${r.invoicePhotos.size} foto(s) de factura", style = MaterialTheme.typography.labelSmall)
+                                        Text(plural(r.invoicePhotos.size, "foto de factura", "fotos de factura"), style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                                 if (r.pendingSync) Text("Pendiente de sincronizar", style = MaterialTheme.typography.labelSmall, color = StatusColors.warning)

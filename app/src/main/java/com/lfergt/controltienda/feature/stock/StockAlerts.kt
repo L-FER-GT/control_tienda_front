@@ -60,14 +60,14 @@ class StockAlertsViewModel @Inject constructor(savedState: SavedStateHandle, sou
 fun StockAlertsScreen(onBack: () -> Unit, onProduct: (String) -> Unit, viewModel: StockAlertsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val canEdit = state.header.access.can(Permission.MANAGE_PRODUCTS)
-    BackScaffold(title = state.header.name, subtitle = "Alertas de stock mínimo", onBack = onBack) { padding ->
+    BackScaffold(title = "Stock bajo", subtitle = state.header.name, onBack = onBack) { padding ->
         when {
             !state.loaded -> LoadingBox(Modifier.padding(padding))
             !state.header.access.can(Permission.STOCK_ALERTS) -> NoAccess(Modifier.padding(padding))
             else -> {
                 val alerts = StockAlerts.compute(state.products)
                 if (alerts.total == 0) {
-                    EmptyState(Icons.Outlined.CheckCircle, "Todo en orden", "Ningún producto está sin stock ni por debajo de su mínimo.", Modifier.padding(padding))
+                    EmptyState(Icons.Outlined.CheckCircle, "Todo en orden", "Ningún producto está agotado ni por debajo de su mínimo.", Modifier.padding(padding))
                     return@BackScaffold
                 }
                 LazyColumn(
@@ -77,11 +77,11 @@ fun StockAlertsScreen(onBack: () -> Unit, onProduct: (String) -> Unit, viewModel
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     if (alerts.outOfStock.isNotEmpty()) {
-                        item { SectionTitle("Sin stock o negativo (${alerts.outOfStock.size})", StatusColors.danger) }
+                        item { SectionTitle("Agotados (${alerts.outOfStock.size})", StatusColors.danger) }
                         items(alerts.outOfStock, key = { "o" + it.id }) { AlertRow(it, StatusColors.danger, canEdit, onProduct) }
                     }
                     if (alerts.belowMinimum.isNotEmpty()) {
-                        item { SectionTitle("Bajo el mínimo (${alerts.belowMinimum.size})", StatusColors.warning) }
+                        item { SectionTitle("Por agotarse (${alerts.belowMinimum.size})", StatusColors.warning) }
                         items(alerts.belowMinimum, key = { "b" + it.id }) { AlertRow(it, StatusColors.warning, canEdit, onProduct) }
                     }
                 }

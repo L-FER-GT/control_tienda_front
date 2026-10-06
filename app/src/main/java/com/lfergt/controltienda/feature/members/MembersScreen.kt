@@ -21,7 +21,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -37,10 +36,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -72,6 +67,17 @@ import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.EmptyState
 import com.lfergt.controltienda.ui.components.LoadingBox
 import com.lfergt.controltienda.ui.components.NoAccess
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import com.lfergt.controltienda.ui.common.plural
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 
 @Composable
 fun MembersScreen(onBack: () -> Unit, viewModel: MembersViewModel = hiltViewModel()) {
@@ -144,7 +150,6 @@ fun MembersScreen(onBack: () -> Unit, viewModel: MembersViewModel = hiltViewMode
             state = invite,
             onDismiss = viewModel::closeInvite,
             onRole = viewModel::setInviteRole,
-            onMode = viewModel::setByCode,
             onQuery = viewModel::onQuery,
             onSend = viewModel::sendInvite,
         )
@@ -162,32 +167,34 @@ fun MembersScreen(onBack: () -> Unit, viewModel: MembersViewModel = hiltViewMode
 @Composable
 private fun MemberRow(member: Membership, isMe: Boolean, onActive: (Boolean) -> Unit, onPermissions: () -> Unit) {
     val editable = member.role != StoreRole.OWNER && !isMe
+    var menu by remember { mutableStateOf(false) }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         ListItem(
-            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = { Avatar(member.displayName, member.photoPath) },
             headlineContent = { Text(member.displayName + if (isMe) " (tú)" else "") },
             supportingContent = {
                 Column {
-                    Text("${member.role.label} · ${UserCode.pretty(member.code)}")
-                    if (member.role == StoreRole.EMPLOYEE) {
-                        Text(
-                            if (member.permissions.isEmpty()) "Acceso base: ver productos, crear orden y mis ventas"
-                            else "Extra: " + member.permissions.joinToString { it.label },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    if (!member.active) Text("Deshabilitado", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    val extra = if (member.role == StoreRole.EMPLOYEE && member.permissions.isNotEmpty()) {
+                        " · " + plural(member.permissions.size, "permiso adicional", "permisos adicionales")
+                    } else ""
+                    Text(member.role.label + extra)
+                    if (!member.active) Text("Sin acceso", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             },
             trailingContent = {
                 if (editable) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (member.role == StoreRole.EMPLOYEE) {
-                            IconButton(onClick = onPermissions) { Icon(Icons.Outlined.Tune, contentDescription = "Permisos") }
+                    Box {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "Opciones de ${member.displayName}") }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (member.role == StoreRole.EMPLOYEE) {
+                                DropdownMenuItem(text = { Text("Permisos") }, onClick = { menu = false; onPermissions() })
+                            }
+                            DropdownMenuItem(
+                                text = { Text(if (member.active) "Quitar acceso" else "Dar acceso") },
+                                onClick = { menu = false; onActive(!member.active) },
+                            )
                         }
-                        Switch(checked = member.active, onCheckedChange = onActive, modifier = Modifier.semantics { contentDescription = "Habilitar acceso de ${member.displayName}" })
                     }
                 }
             },
@@ -214,7 +221,6 @@ private fun InviteDialog(
     state: InviteState,
     onDismiss: () -> Unit,
     onRole: (StoreRole) -> Unit,
-    onMode: (Boolean) -> Unit,
     onQuery: (String) -> Unit,
     onSend: (PublicProfile) -> Unit,
 ) {
@@ -233,21 +239,17 @@ private fun InviteDialog(
                         ) { Text(r.label) }
                     }
                 }
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    SegmentedButton(selected = state.byCode, onClick = { onMode(true) }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("Por código") }
-                    SegmentedButton(selected = !state.byCode, onClick = { onMode(false) }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("Por nombre") }
-                }
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = onQuery,
-                    label = { Text(if (state.byCode) "Código de 10 dígitos" else "Nombre de la persona") },
+                    label = { Text("Código o nombre") },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = if (state.byCode) KeyboardType.Number else KeyboardType.Text),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     trailingIcon = {
                         if (state.searching) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                         else if (state.query.isNotEmpty()) IconButton(onClick = { onQuery("") }) { Icon(Icons.Outlined.Close, "Limpiar") }
                     },
-                    supportingText = { if (state.byCode) Text("${state.query.length}/10") },
+                    supportingText = { Text(if (state.byCode) "Código: ${state.query.length}/10 dígitos" else "Código de 10 dígitos o al menos 2 letras del nombre") },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 state.searchError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -291,7 +293,7 @@ private fun PermissionsSheet(member: Membership, onDismiss: () -> Unit, busy: Bo
         ) {
             Text("Permisos de ${member.displayName}", style = MaterialTheme.typography.titleLarge)
             Text(
-                "Todo empleado puede ver productos, crear órdenes y ver sus ventas. Activa los módulos de administrador que quieras darle. " +
+                "Todo empleado puede ver productos, registrar ventas y ver las suyas. Activa los módulos de administrador que quieras darle. " +
                     "Para tener otro administrador, dale todos los permisos.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -302,16 +304,14 @@ private fun PermissionsSheet(member: Membership, onDismiss: () -> Unit, busy: Bo
                 }
             }
             Permission.entries.forEach { permission ->
+                val checked = permission in selected
                 ListItem(
+                    modifier = Modifier.toggleable(value = checked, role = Role.Checkbox) {
+                        selected = if (it) selected + permission else selected - permission
+                    },
                     headlineContent = { Text(permission.label) },
                     supportingContent = { Text(permission.description) },
-                    trailingContent = {
-                        Checkbox(
-                            modifier = Modifier.semantics { contentDescription = permission.label },
-                            checked = permission in selected,
-                            onCheckedChange = { checked -> selected = if (checked) selected + permission else selected - permission },
-                        )
-                    },
+                    trailingContent = { Checkbox(checked = checked, onCheckedChange = null) },
                 )
             }
             Button(enabled = !busy, onClick = { onSave(selected) }, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {

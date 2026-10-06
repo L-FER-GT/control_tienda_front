@@ -29,7 +29,6 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.TableView
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -91,7 +90,7 @@ import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.CollectMessages
 import com.lfergt.controltienda.ui.common.StoreContext
 import com.lfergt.controltienda.ui.common.StoreHeader
-import com.lfergt.controltienda.ui.common.formatDate
+import com.lfergt.controltienda.ui.common.formatShortDate
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.LoadingBox
 import com.lfergt.controltienda.ui.components.NoAccess
@@ -110,6 +109,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.Locale
 import javax.inject.Inject
+import androidx.compose.material3.LinearProgressIndicator
+import kotlinx.coroutines.flow.first
+import com.lfergt.controltienda.ui.common.plural
 
 val ReportType.icon: ImageVector
     get() = when (this) {
@@ -195,10 +197,18 @@ class ReportDetailViewModel @Inject constructor(
 ) : BaseViewModel() {
     private val route = savedState.toRoute<ReportDetailRoute>()
     val catalog = source.observe(route.storeId).stateIn(viewModelScope, SharingStarted.Eagerly, CatalogData())
-    private val _state = MutableStateFlow(ReportUiState(ReportType.valueOf(route.type)))
+    private val _state = MutableStateFlow(ReportUiState(ReportType.entries.firstOrNull { it.name == route.type } ?: ReportType.SALES_BY_PERIOD))
     val state = _state.asStateFlow()
     private val shareChannel = Channel<ExportedFile>(Channel.CONFLATED)
     val share = shareChannel.receiveAsFlow()
+
+    init {
+        // El reporte se genera solo al abrir (cuando el catálogo ya cargó) y al cambiar cualquier filtro.
+        viewModelScope.launch {
+            catalog.first { it.loaded && it.header.store != null }
+            apply()
+        }
+    }
 
     fun setPreset(preset: RangePreset) {
         if (_state.value.loading) return
@@ -212,14 +222,22 @@ class ReportDetailViewModel @Inject constructor(
             RangePreset.CUSTOM -> _state.value.from to _state.value.to
         }
         _state.update { it.copy(preset = preset, from = from, to = to, table = null) }
+        apply()
     }
 
-    fun setCustomRange(from: LocalDate, to: LocalDate) = _state.update { if (it.loading) it else it.copy(preset = RangePreset.CUSTOM, from = from, to = to, table = null) }
-    fun setGrouping(g: PeriodGrouping) = _state.update { if (it.loading) it else it.copy(grouping = g, table = null) }
-    fun setLimit(limit: Int) = _state.update { if (it.loading) it else it.copy(limit = limit, table = null) }
+    fun setCustomRange(from: LocalDate, to: LocalDate) = updateFilters { it.copy(preset = RangePreset.CUSTOM, from = from, to = to) }
+    fun setGrouping(g: PeriodGrouping) = updateFilters { it.copy(grouping = g) }
+    fun setLimit(limit: Int) = updateFilters { it.copy(limit = limit) }
 
-    /** Aplicar filtros y generar el reporte (las ventas se consultan al servidor o a la caché local). */
-    fun apply() {
+    /** Mientras se genera un reporte los filtros quedan fijos; al cambiarlos se genera de nuevo. */
+    private fun updateFilters(change: (ReportUiState) -> ReportUiState) {
+        if (_state.value.loading) return
+        _state.update { change(it).copy(table = null) }
+        apply()
+    }
+
+    /** Genera el reporte con los filtros actuales (las ventas se consultan al servidor o a la caché local). */
+    private fun apply() {
         val s = _state.value
         if (s.loading) return
         val data = catalog.value
@@ -278,7 +296,7 @@ fun ReportDetailScreen(onBack: () -> Unit, viewModel: ReportDetailViewModel = hi
         }
     }
 
-    BackScaffold(title = "Reportes", subtitle = state.type.title, onBack = onBack) { padding ->
+    BackScaffold(title = state.type.title, subtitle = catalog.header.name, onBack = onBack) { padding ->
         when {
             !catalog.loaded -> LoadingBox(Modifier.padding(padding))
             !catalog.header.access.can(Permission.REPORTS) -> NoAccess(Modifier.padding(padding))
@@ -342,12 +360,12 @@ private fun Filters(state: ReportUiState, viewModel: ReportDetailViewModel, onCu
                 }
             }
             Text(
-                if (state.from == state.to) formatDate(state.from.toMillis()) else "${formatDate(state.from.toMillis())} al ${formatDate(state.to.toMillis())}",
+                if (state.from == state.to) formatShortDate(state.from.toMillis()) else "${formatShortDate(state.from.toMillis())} al ${formatShortDate(state.to.toMillis())}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            Text("Muestra el inventario actual de los productos con stock controlado.", style = MaterialTheme.typography.bodyMedium)
+            Text("Muestra el stock actual de los productos que lo controlan.", style = MaterialTheme.typography.bodyMedium)
         }
         if (state.type.needsGrouping) {
             Text("Agrupar por", style = MaterialTheme.typography.titleSmall)
@@ -365,9 +383,7 @@ private fun Filters(state: ReportUiState, viewModel: ReportDetailViewModel, onCu
                 }
             }
         }
-        Button(onClick = viewModel::apply, enabled = !state.loading, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-            if (state.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) else Text("Ver reporte")
-        }
+        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
     }
 }
 
@@ -410,7 +426,7 @@ private fun ReportTableView(table: ReportTable) {
                     totals.forEachIndexed { i, cell -> if (cell !is ReportCell.Text) Text("${table.columns[i].title}: ${cellText(cell, table.currency)}", style = MaterialTheme.typography.titleSmall) }
                 }
             }
-            Text("${table.rows.size} filas · Desliza la tabla para ver todas las columnas", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp))
+            Text("${plural(table.rows.size, "fila", "filas")} · Desliza la tabla para ver todas las columnas", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp))
             TableRow(table.columns.map { it.title }, table, widths, scroll, header = true)
             HorizontalDivider()
             if (table.rows.isEmpty()) {
@@ -423,10 +439,6 @@ private fun ReportTableView(table: ReportTable) {
                 TextButton(onClick = { page-- }, enabled = page > 0) { Text("Anterior") }
                 Text("${page + 1} / $pages")
                 TextButton(onClick = { page++ }, enabled = page + 1 < pages) { Text("Siguiente") }
-            }
-            table.totals?.let {
-                HorizontalDivider()
-                TableRow(it.map { cell -> cellText(cell, table.currency) }, table, widths, scroll, bold = true)
             }
         }
     }

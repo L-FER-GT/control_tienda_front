@@ -32,6 +32,7 @@ object ProductValidator {
     const val FIELD_NAME = "name"
     const val FIELD_SALE_PRICE = "salePrice"
     const val FIELD_PURCHASE_COST = "purchaseCost"
+    const val FIELD_STOCK = "stock"
     const val FIELD_STOCK_ALERT = "stockAlert"
     const val FIELD_BARCODE = "barcode"
     const val FIELD_QR = "qr"

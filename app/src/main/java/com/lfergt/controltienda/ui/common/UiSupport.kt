@@ -11,9 +11,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 const val TAG = "ControlTienda"
 
@@ -49,11 +46,3 @@ fun CollectMessages(viewModel: BaseViewModel) {
         viewModel.messages.collect { snackbar.showSnackbar(it) }
     }
 }
-
-private val locale = Locale.forLanguageTag("es-PE")
-
-fun formatDateTime(millis: Long): String = SimpleDateFormat("dd/MM/yyyy HH:mm", locale).format(Date(millis))
-
-fun formatDate(millis: Long): String = SimpleDateFormat("dd/MM/yyyy", locale).format(Date(millis))
-
-fun formatTime(millis: Long): String = SimpleDateFormat("HH:mm", locale).format(Date(millis))

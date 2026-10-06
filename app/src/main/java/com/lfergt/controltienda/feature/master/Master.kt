@@ -53,7 +53,7 @@ import com.lfergt.controltienda.domain.port.AdminRepository
 import com.lfergt.controltienda.domain.port.AuthRepository
 import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.CollectMessages
-import com.lfergt.controltienda.ui.common.formatDateTime
+import com.lfergt.controltienda.ui.common.formatWhen
 import com.lfergt.controltienda.ui.components.Avatar
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.EmptyState
@@ -190,7 +190,7 @@ private fun UsageTab(state: MasterState) {
             Column(Modifier.widthIn(max = 720.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Almacenamiento de Supabase Free", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Estimación de base de datos y archivos. Consulta tráfico y demás cuotas en el panel de Supabase. Actualizado: ${formatDateTime(report.generatedAt)}",
+                    "Estimación de base de datos y archivos. Consulta tráfico y demás cuotas en el panel de Supabase. Actualizado: ${formatWhen(report.generatedAt)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -283,7 +283,7 @@ private fun StoresTab(state: MasterState, onQuery: (String) -> Unit, onDisable: 
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 headlineContent = { Text(store.name) },
                 supportingContent = {
-                    Text("${store.address} · Dueño: ${store.ownerName}" + if (store.disabledBySystem) " · Deshabilitada" else "")
+                    Text("${store.address} · Administrador: ${store.ownerName}" + if (store.disabledBySystem) " · Deshabilitada" else "")
                 },
                 trailingContent = { Switch(modifier = Modifier.semantics { contentDescription = "Habilitar tienda ${store.name}" }, checked = !store.disabledBySystem, onCheckedChange = { enabled -> onDisable(store, !enabled) }) },
             )

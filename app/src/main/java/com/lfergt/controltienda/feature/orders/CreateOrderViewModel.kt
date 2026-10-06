@@ -151,7 +151,7 @@ class CreateOrderViewModel @Inject constructor(
                 cart.value = OrderCart()
                 payment.value = PaymentMethod.CASH
                 feedback.value = null
-                message("Venta registrada. El número de orden se asigna al sincronizar.")
+                message("Venta registrada. El número de venta se asigna al sincronizar.")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

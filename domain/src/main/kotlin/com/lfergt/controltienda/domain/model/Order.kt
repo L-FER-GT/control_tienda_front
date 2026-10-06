@@ -48,7 +48,7 @@ data class Order(
     val displayNumber: String get() = number?.let { formatNumber(it) } ?: "Pendiente"
 
     companion object {
-        fun formatNumber(number: Long): String = "N° " + number.toString().padStart(6, '0')
+        fun formatNumber(number: Long): String = "N° $number"
     }
 }
 

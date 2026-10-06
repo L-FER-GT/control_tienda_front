@@ -41,18 +41,22 @@ data class MembersState(
     val myUid: String? = null,
 )
 
-/** Estado del diálogo de invitación. */
+/** Solo números (con espacios o guiones) se buscan como código; cualquier otro texto, por nombre. */
+fun isCodeQuery(text: String): Boolean = text.isNotBlank() && text.all { it.isDigit() || it == ' ' || it == '-' }
+
+/** Estado del diálogo de invitación: un solo campo para código o nombre. */
 data class InviteState(
     val open: Boolean = false,
     val role: StoreRole = StoreRole.EMPLOYEE,
-    val byCode: Boolean = true,
     val query: String = "",
     val searching: Boolean = false,
     val searchError: String? = null,
     val results: List<PublicProfile> = emptyList(),
     val searched: Boolean = false,
     val sending: Boolean = false,
-)
+) {
+    val byCode: Boolean get() = isCodeQuery(query)
+}
 
 @HiltViewModel
 class MembersViewModel @Inject constructor(
@@ -88,10 +92,8 @@ class MembersViewModel @Inject constructor(
     fun openInvite(role: StoreRole) = _invite.update { InviteState(open = true, role = role) }
     fun closeInvite() = _invite.update { it.copy(open = false) }
     fun setInviteRole(role: StoreRole) = _invite.update { it.copy(role = role) }
-    fun setByCode(byCode: Boolean) = _invite.update { it.copy(byCode = byCode, query = "", results = emptyList(), searched = false) }
-
     fun onQuery(text: String) {
-        val clean = if (_invite.value.byCode) text.filter(Char::isDigit).take(UserCode.LENGTH) else text
+        val clean = if (isCodeQuery(text)) text.filter(Char::isDigit).take(UserCode.LENGTH) else text
         _invite.update { it.copy(query = clean, searched = false, searchError = null, searching = false, results = emptyList()) }
     }
 
@@ -138,7 +140,7 @@ class MembersViewModel @Inject constructor(
 
     fun setActive(member: Membership, active: Boolean) = launchSafe {
         members.setActive(storeId, member.uid, active)
-        message(if (active) "${member.displayName} fue habilitado" else "${member.displayName} fue deshabilitado")
+        message(if (active) "${member.displayName} ya tiene acceso" else "${member.displayName} ya no tiene acceso")
     }
 
     val savingPermissions = MutableStateFlow(false)

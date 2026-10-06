@@ -17,7 +17,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,7 +38,7 @@ import com.lfergt.controltienda.navigation.SaleDetailRoute
 import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.StoreContext
 import com.lfergt.controltienda.ui.common.StoreHeader
-import com.lfergt.controltienda.ui.common.formatDateTime
+import com.lfergt.controltienda.ui.common.formatWhen
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.EmptyState
 import com.lfergt.controltienda.ui.components.LoadingBox
@@ -50,8 +49,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
-import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -61,16 +58,16 @@ import com.lfergt.controltienda.ui.components.HistoryFilters
 import com.lfergt.controltienda.feature.catalog.normalizedSearch
 import javax.inject.Inject
 import com.lfergt.controltienda.ui.components.UnavailableState
+import com.lfergt.controltienda.ui.common.plural
 
 data class MySalesState(
     val header: StoreHeader = StoreHeader(),
     val orders: List<Order> = emptyList(),
     val loaded: Boolean = false,
-) {
-    private val todayStart: Long get() = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val todayTotal: Long get() = orders.filter { it.createdAt >= todayStart }.sumOf { it.totalCents }
-    val todayCount: Int get() = orders.count { it.createdAt >= todayStart }
-}
+)
+
+/** "Venta N° 123", o "Venta por sincronizar" mientras el servidor no le asigna número. */
+val Order.title: String get() = number?.let { "Venta " + Order.formatNumber(it) } ?: "Venta por sincronizar"
 
 @HiltViewModel
 class MySalesViewModel @Inject constructor(
@@ -93,7 +90,7 @@ fun MySalesScreen(onBack: () -> Unit, onDetail: (String) -> Unit, viewModel: MyS
     var query by rememberSaveable { mutableStateOf("") }
     var period by rememberSaveable { mutableStateOf(HistoryPeriod.ALL) }
     val currency = state.header.currency
-    val visible = state.orders.filter { order -> period.includes(order.createdAt) && normalizedSearch(order.displayNumber + " " + order.items.joinToString { it.description }).contains(normalizedSearch(query)) }
+    val visible = state.orders.filter { order -> period.includes(order.createdAt) && normalizedSearch(order.title + " " + order.items.joinToString { it.description }).contains(normalizedSearch(query)) }
     BackScaffold(title = "Mis ventas", subtitle = state.header.name, onBack = onBack) { padding ->
         when {
             !state.loaded -> LoadingBox(Modifier.padding(padding))
@@ -105,8 +102,6 @@ fun MySalesScreen(onBack: () -> Unit, onDetail: (String) -> Unit, viewModel: MyS
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                item { HistoryFilters(query, { query = it }, period, { period = it }, visible.size) }
-                if (visible.isEmpty()) item { Text("Sin ventas para estos filtros.") }
                 item {
                     Card(
                         Modifier.widthIn(max = 720.dp).fillMaxWidth(),
@@ -114,23 +109,28 @@ fun MySalesScreen(onBack: () -> Unit, onDetail: (String) -> Unit, viewModel: MyS
                     ) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Vendido hoy", style = MaterialTheme.typography.labelLarge)
-                                Text("${state.todayCount} ventas", style = MaterialTheme.typography.bodySmall)
+                                Text("Vendido ${period.summary}", style = MaterialTheme.typography.labelLarge)
+                                Text(plural(visible.size, "venta", "ventas"), style = MaterialTheme.typography.bodySmall)
                             }
-                            Text(Money.format(state.todayTotal, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Text(Money.format(visible.sumOf { it.totalCents }, currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
+                item { HistoryFilters(query, { query = it }, period, { period = it }, visible.size) }
+                if (visible.isEmpty()) item { Text("Sin ventas para estos filtros.") }
                 items(visible, key = { it.id }) { order ->
-                    Card(Modifier.widthIn(max = 720.dp).fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                    Card(
+                        onClick = { onDetail(order.id) },
+                        modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                    ) {
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(order.displayNumber, style = MaterialTheme.typography.titleSmall)
-                                Text(formatDateTime(order.createdAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.format(order.totalCents, order.currency), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(order.title, style = MaterialTheme.typography.titleSmall)
+                                Text(formatWhen(order.createdAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (order.pendingSync) PendingSyncLabel()
                             }
-                            OutlinedButton(onClick = { onDetail(order.id) }) { Text("Ver detalles") }
+                            Text(Money.format(order.totalCents, order.currency), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -164,7 +164,7 @@ class SaleDetailViewModel @Inject constructor(
 @Composable
 fun SaleDetailScreen(onBack: () -> Unit, viewModel: SaleDetailViewModel = hiltViewModel()) {
     val order by viewModel.state.collectAsStateWithLifecycle()
-    BackScaffold(title = "Mis ventas", onBack = onBack) { padding ->
+    BackScaffold(title = order.second?.title ?: "Venta", onBack = onBack) { padding ->
         val o = order.second
         if (!order.first) {
             LoadingBox(Modifier.padding(padding))
@@ -182,9 +182,7 @@ fun SaleDetailScreen(onBack: () -> Unit, viewModel: SaleDetailViewModel = hiltVi
         ) {
             item {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 12.dp)) {
-                    Text(o.displayNumber, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                    Text(formatDateTime(o.createdAt), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("ID: ${o.id}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatWhen(o.createdAt), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (o.pendingSync) PendingSyncLabel()
                 }
             }
@@ -202,7 +200,7 @@ fun SaleDetailScreen(onBack: () -> Unit, viewModel: SaleDetailViewModel = hiltVi
                     Text("${item.unit.formatQuantity(item.quantity)} ${item.unit.symbol}", Modifier.weight(0.8f), style = MaterialTheme.typography.bodyMedium)
                     Column(Modifier.weight(2.4f)) {
                         Text(item.description, style = MaterialTheme.typography.bodyMedium)
-                        if (item.manual) Text("Ítem manual", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (item.manual) Text("Agregado a mano", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(Money.format(item.unitPriceCents, o.currency), Modifier.weight(1.2f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodyMedium)
                     Text(Money.format(item.subtotalCents, o.currency), Modifier.weight(1.2f), textAlign = TextAlign.End, style = MaterialTheme.typography.bodyMedium)
@@ -216,7 +214,7 @@ fun SaleDetailScreen(onBack: () -> Unit, viewModel: SaleDetailViewModel = hiltVi
                         Text("Vendedor: ${o.createdByName}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("TOTAL", style = MaterialTheme.typography.labelLarge)
+                        Text("Total", style = MaterialTheme.typography.labelLarge)
                         Text(Money.format(o.totalCents, o.currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     }
                 }

@@ -43,7 +43,7 @@ import com.lfergt.controltienda.domain.model.NotificationType
 import com.lfergt.controltienda.domain.port.NotificationRepository
 import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.CollectMessages
-import com.lfergt.controltienda.ui.common.formatDateTime
+import com.lfergt.controltienda.ui.common.formatWhen
 import com.lfergt.controltienda.ui.components.Avatar
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.EmptyState
@@ -170,7 +170,7 @@ private fun NotificationCard(
                     Text(n.title, style = MaterialTheme.typography.titleSmall, fontWeight = if (n.read) FontWeight.Medium else FontWeight.Bold)
                     n.fromName?.let { Text("De: $it", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
                     Text(n.body, style = MaterialTheme.typography.bodyMedium)
-                    Text(formatDateTime(n.createdAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatWhen(n.createdAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onDelete) { Icon(Icons.Outlined.DeleteOutline, contentDescription = "Eliminar") }
             }
