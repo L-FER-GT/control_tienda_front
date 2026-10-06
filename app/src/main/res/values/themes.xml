@@ -3,6 +3,8 @@
     <style name="Theme.ControlTienda" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Mismo fondo que Compose (claro u oscuro): es lo que se ve si algo queda sin pintar. -->
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
 
     <style name="Theme.ControlTienda.Starting" parent="Theme.SplashScreen">

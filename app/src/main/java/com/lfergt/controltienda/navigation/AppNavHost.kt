@@ -1,6 +1,16 @@
 package com.lfergt.controltienda.navigation
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -45,11 +55,34 @@ fun StoreOption.route(storeId: String): Any = when (this) {
     StoreOption.MEMBERS -> MembersRoute(storeId)
 }
 
+/*
+ * Transición entre pantallas: la nueva entra desde la derecha por encima de la anterior, que se corre un poco
+ * a la izquierda; al volver (botón, tecla o gesto de atrás predictivo), al revés. Ninguna pantalla se vuelve
+ * transparente: el fundido cruzado por defecto de Navigation (700 ms) mezclaba las dos pantallas y dejaba ver
+ * el fondo de la ventana, y eso se veía como un parpadeo.
+ */
+private val navSpec: FiniteAnimationSpec<IntOffset> = tween(300, easing = FastOutSlowInEasing)
+private val slideInFromRight = slideInHorizontally(navSpec) { width -> width }
+private val slideOutToRight = slideOutHorizontally(navSpec) { width -> width }
+private val pushAside = slideOutHorizontally(navSpec) { width -> -width / 4 }
+private val returnFromAside = slideInHorizontally(navSpec) { width -> -width / 4 }
+
 @Composable
 fun AppNavHost(navController: NavHostController, startDestination: Any) {
     val back: () -> Unit = { navController.popBackStack() }
 
-    NavHost(navController = navController, startDestination = startDestination) {
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        enterTransition = { slideInFromRight },
+        exitTransition = { pushAside },
+        popEnterTransition = { returnFromAside },
+        popExitTransition = { slideOutToRight },
+        // Por defecto el gesto usa otra animación (la anterior aparece con fundido y la actual se encoge).
+        predictivePopEnterTransition = { returnFromAside },
+        predictivePopExitTransition = { slideOutToRight },
+    ) {
         composable<LoginRoute> {
             LoginScreen(onLoggedIn = {
                 navController.navigate(HomeRoute) { popUpTo(LoginRoute) { inclusive = true } }
