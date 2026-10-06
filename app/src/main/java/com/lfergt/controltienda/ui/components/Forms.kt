@@ -16,9 +16,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,7 +31,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddAPhoto
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.PanTool
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,7 +47,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,8 +60,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -327,41 +324,34 @@ fun PhotoField(
                 }
             }
         }
-        Text("Máximo 5 MB. Las fotos se comprimen automáticamente.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     if (showSheet) PhotoSourceSheet(onDismiss = { showSheet = false }, picker = picker)
 }
 
-// ---------------------------------------------------------------- botón + con opciones
+// ---------------------------------------------------------------- agregar productos
 
-data class FabAction(val label: String, val icon: ImageVector, val onClick: () -> Unit)
-
-/** Botón "+" en la esquina inferior derecha que despliega varias opciones. */
+/** Reemplaza al botón +: código de barras, QR y a mano, siempre visibles. */
 @Composable
-fun ExpandableFab(actions: List<FabAction>, modifier: Modifier = Modifier, icon: ImageVector) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    Column(modifier, horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AnimatedVisibility(visible = expanded, enter = fadeIn(), exit = fadeOut()) {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                actions.forEach { action ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Surface(
-                            onClick = { expanded = false; action.onClick() },
-                            shape = MaterialTheme.shapes.small,
-                            tonalElevation = 3.dp,
-                            shadowElevation = 2.dp,
-                        ) {
-                            Text(action.label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
-                        }
-                        SmallFloatingActionButton(onClick = { expanded = false; action.onClick() }) {
-                            Icon(action.icon, contentDescription = action.label)
-                        }
-                    }
-                }
-            }
-        }
-        FloatingActionButton(onClick = { expanded = !expanded }) {
-            Icon(icon, contentDescription = if (expanded) "Cerrar" else "Agregar", modifier = Modifier.rotate(if (expanded) 45f else 0f))
+fun AddActions(onBarcode: () -> Unit, onQr: () -> Unit, onManual: () -> Unit, manualLabel: String, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        FloatingActionButton(onClick = onBarcode) { Icon(Icons.Outlined.ViewWeek, contentDescription = "Escanear código de barras") }
+        FloatingActionButton(onClick = onQr) { Icon(Icons.Outlined.QrCode2, contentDescription = "Escanear QR") }
+        FloatingActionButton(onClick = onManual) { Icon(Icons.Outlined.PanTool, contentDescription = manualLabel) }
+    }
+}
+
+/** Parece un buscador; al tocarlo abre la búsqueda de productos. */
+@Composable
+fun SearchLauncher(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text, Modifier.padding(start = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

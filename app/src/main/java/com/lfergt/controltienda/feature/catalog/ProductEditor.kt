@@ -57,7 +57,7 @@ import com.lfergt.controltienda.feature.scanner.ScannerDialog
 import com.lfergt.controltienda.navigation.ProductEditorRoute
 import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.CollectMessages
-import com.lfergt.controltienda.ui.common.formatDateTime
+import com.lfergt.controltienda.ui.common.formatWhen
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.ConfirmDialog
 import com.lfergt.controltienda.ui.components.DecimalInput
@@ -92,6 +92,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import javax.inject.Inject
 import com.lfergt.controltienda.ui.components.UnavailableState
+import androidx.compose.material3.TextButton
 
 data class ProductForm(
     val unavailable: Boolean = false,
@@ -198,7 +199,7 @@ class ProductEditorViewModel @Inject constructor(
     fun onCategory(id: String?) = _form.update { it.copy(categoryId = id) }
     fun onUnit(u: MeasureUnit) = _form.update { it.copy(unit = u) }
     fun onTrackStock(v: Boolean) = _form.update { it.copy(trackStock = v, errors = emptyMap()) }
-    fun onStock(v: String) = edit(ProductValidator.FIELD_STOCK_ALERT) { it.copy(stock = v) }
+    fun onStock(v: String) = edit(ProductValidator.FIELD_STOCK) { it.copy(stock = v) }
     fun onStockAlert(v: String) = edit(ProductValidator.FIELD_STOCK_ALERT) { it.copy(stockAlert = v) }
     fun onBarcode(v: String) = edit(ProductValidator.FIELD_BARCODE) { it.copy(barcode = v.trim()) }
     fun onQr(v: String) = edit(ProductValidator.FIELD_QR) { it.copy(qrCode = v.trim()) }
@@ -215,7 +216,7 @@ class ProductEditorViewModel @Inject constructor(
             return
         }
         if (f.trackStock && f.stock.toDecimalOrNull() == null) {
-            _form.update { it.copy(errors = it.errors + (ProductValidator.FIELD_STOCK_ALERT to "Ingresa el stock actual")) }
+            _form.update { it.copy(errors = it.errors + (ProductValidator.FIELD_STOCK to "Ingresa el stock actual")) }
             return
         }
         val draft = ProductDraft(
@@ -267,6 +268,7 @@ fun ProductEditorScreen(onBack: () -> Unit, viewModel: ProductEditorViewModel = 
     val history by viewModel.history.collectAsStateWithLifecycle()
     var scanFor by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var showQr by rememberSaveable { mutableStateOf(false) }
     val currency = data.header.currency
     val formScroll = rememberScrollState()
     LaunchedEffect(form.errors) { if (form.errors.isNotEmpty()) formScroll.animateScrollTo(0) }
@@ -274,8 +276,8 @@ fun ProductEditorScreen(onBack: () -> Unit, viewModel: ProductEditorViewModel = 
     LaunchedEffect(Unit) { viewModel.done.collect { onBack() } }
 
     BackScaffold(
-        title = "Gestionar productos",
-        subtitle = if (viewModel.productId == null) "Nuevo producto" else form.name,
+        title = if (viewModel.productId == null) "Nuevo producto" else "Editar producto",
+        subtitle = data.header.name,
         onBack = rememberGuardedBack(viewModel.dirty, form.saving, onBack),
         bottomBar = {
             if (data.loaded && form.loaded && !form.unavailable && data.header.access.can(Permission.MANAGE_PRODUCTS)) {
@@ -297,14 +299,14 @@ fun ProductEditorScreen(onBack: () -> Unit, viewModel: ProductEditorViewModel = 
             !data.header.access.can(Permission.MANAGE_PRODUCTS) -> NoAccess(Modifier.padding(padding))
             else -> Column(Modifier.padding(padding).verticalScroll(formScroll)) {
                 FormColumn {
-                    if (form.errors.isNotEmpty()) Text(form.errors.values.distinct().joinToString("\n"), color = MaterialTheme.colorScheme.error)
+                    if (form.errors.isNotEmpty()) Text("Revisa los campos marcados en rojo.", color = MaterialTheme.colorScheme.error)
                     TextInput(form.name, viewModel::onName, "Nombre *", error = form.errors[ProductValidator.FIELD_NAME])
                     form.suggestion?.let { suggestion ->
                         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.AutoAwesome, null)
                                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                    Text("Sugerencia (Open Food Facts)", style = MaterialTheme.typography.labelMedium)
+                                    Text("Nombre sugerido", style = MaterialTheme.typography.labelMedium)
                                     Text(suggestion, style = MaterialTheme.typography.bodyLarge)
                                 }
                                 AssistChip(onClick = viewModel::useSuggestion, label = { Text("Usar") })
@@ -335,19 +337,18 @@ fun ProductEditorScreen(onBack: () -> Unit, viewModel: ProductEditorViewModel = 
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Controlar inventario", Modifier.weight(1f))
-                        Switch(form.trackStock, viewModel::onTrackStock, Modifier.semantics { contentDescription = "Controlar inventario" })
+                        Text("Controlar stock", Modifier.weight(1f))
+                        Switch(form.trackStock, viewModel::onTrackStock, Modifier.semantics { contentDescription = "Controlar stock" })
                     }
                     if (form.trackStock) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         DecimalInput(
                             form.stock, viewModel::onStock, "Stock actual *", Modifier.fillMaxWidth(), allowNegative = true,
-                            supporting = "Cantidad disponible; puede ser negativa",
-                            error = form.errors[ProductValidator.FIELD_STOCK_ALERT],
+                            error = form.errors[ProductValidator.FIELD_STOCK],
                         )
                         DecimalInput(
-                            form.stockAlert, viewModel::onStockAlert, "Alerta de stock", Modifier.fillMaxWidth(),
+                            form.stockAlert, viewModel::onStockAlert, "Stock mínimo", Modifier.fillMaxWidth(),
                             error = form.errors[ProductValidator.FIELD_STOCK_ALERT],
-                            supporting = "Avisa al llegar a este mínimo",
+                            supporting = "Te avisamos cuando llegue a esta cantidad",
                         )
                     }
                     TextInput(
@@ -355,12 +356,16 @@ fun ProductEditorScreen(onBack: () -> Unit, viewModel: ProductEditorViewModel = 
                         error = form.errors[ProductValidator.FIELD_BARCODE],
                         trailing = { IconButton(onClick = { scanFor = "bar" }) { Icon(Icons.Outlined.QrCodeScanner, "Escanear código de barras") } },
                     )
-                    TextInput(
-                        form.qrCode, viewModel::onQr, "Código QR",
-                        error = form.errors[ProductValidator.FIELD_QR],
-                        trailing = { IconButton(onClick = { scanFor = "qr" }) { Icon(Icons.Outlined.QrCode2, "Escanear QR") } },
-                    )
-                    PhotoField(form.photoPath, form.pickedPhoto, { viewModel.onPhoto(it.toString()) }, label = "Foto del producto (opcional)", aspectRatio = 3f)
+                    if (showQr || form.qrCode.isNotBlank() || ProductValidator.FIELD_QR in form.errors) {
+                        TextInput(
+                            form.qrCode, viewModel::onQr, "Código QR",
+                            error = form.errors[ProductValidator.FIELD_QR],
+                            trailing = { IconButton(onClick = { scanFor = "qr" }) { Icon(Icons.Outlined.QrCode2, "Escanear QR") } },
+                        )
+                    } else {
+                        TextButton(onClick = { showQr = true }) { Text("Agregar código QR") }
+                    }
+                    PhotoField(form.photoPath, form.pickedPhoto, { viewModel.onPhoto(it.toString()) }, label = "Foto del producto", aspectRatio = 3f)
                     if (history.isNotEmpty()) PriceHistory(history, currency)
                 }
             }
@@ -398,11 +403,11 @@ private fun PriceHistory(history: List<PriceHistoryEntry>, currency: String) {
             val source = when (entry.source) {
                 PriceChangeSource.CREATED -> "Creación"
                 PriceChangeSource.MANUAL -> "Edición"
-                PriceChangeSource.RECEPTION -> "Recepción"
+                PriceChangeSource.RECEPTION -> "Compra"
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("${formatDateTime(entry.at)} · $source", style = MaterialTheme.typography.bodySmall)
+                    Text("${formatWhen(entry.at)} · $source", style = MaterialTheme.typography.bodySmall)
                     Text(entry.changedByName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Column(horizontalAlignment = Alignment.End) {

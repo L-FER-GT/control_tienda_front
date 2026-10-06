@@ -131,12 +131,16 @@ fun AppNavHost(navController: NavHostController, startDestination: Any, animate:
             val storeId = entry.toRoute<ViewCategoriesRoute>().storeId
             ViewCategoriesScreen(onBack = back, onCategory = { navController.navigate(ViewProductsRoute(storeId, it)) })
         }
-        composable<ViewProductsRoute> { ViewProductsScreen(onBack = back) }
+        composable<ViewProductsRoute> { entry ->
+            val storeId = entry.toRoute<ViewProductsRoute>().storeId
+            ViewProductsScreen(onBack = back, onCategories = { navController.navigate(CategoriesRoute(storeId)) })
+        }
         composable<ManageProductsRoute> { entry ->
             val storeId = entry.toRoute<ManageProductsRoute>().storeId
             ManageProductsScreen(
                 onBack = back,
                 onEdit = { productId, code -> navController.navigate(ProductEditorRoute(storeId, productId, code)) },
+                onCategories = { navController.navigate(CategoriesRoute(storeId)) },
             )
         }
         composable<ProductEditorRoute> { ProductEditorScreen(onBack = back) }

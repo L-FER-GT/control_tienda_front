@@ -32,13 +32,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
-import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.ui.graphics.Color
+import com.lfergt.controltienda.ui.common.plural
 import com.lfergt.controltienda.domain.port.SyncStatus
-import com.lfergt.controltienda.ui.common.formatDateTime
+import com.lfergt.controltienda.ui.common.formatWhen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -107,30 +113,64 @@ fun BackScaffold(
     )
 }
 
+/** Qué avisar sobre la conexión y los cambios; null cuando todo está enviado y no hay nada que mostrar. */
+enum class SyncIndicator { ERROR, OFFLINE, PENDING }
+
+fun syncIndicator(status: SyncStatus, offline: Boolean): SyncIndicator? = when {
+    status.lastFailure != null -> SyncIndicator.ERROR
+    offline -> SyncIndicator.OFFLINE
+    status.pending > 0 || status.syncing -> SyncIndicator.PENDING
+    else -> null
+}
+
+fun syncLabel(indicator: SyncIndicator, pending: Int): String {
+    val changes = plural(pending, "cambio pendiente", "cambios pendientes")
+    return when (indicator) {
+        SyncIndicator.ERROR -> "No se pudo guardar un cambio"
+        SyncIndicator.OFFLINE -> if (pending > 0) "Sin conexión · $changes" else "Sin conexión"
+        SyncIndicator.PENDING -> if (pending > 0) changes else "Enviando cambios"
+    }
+}
+
+/** Aparece solo si hay cambios por enviar, falta conexión o hubo un error. [onPhoto]: sobre la foto de la tienda. */
 @Composable
-fun OfflineIcon() {
+fun OfflineIcon(onPhoto: Boolean = false) {
     val offline = LocalOffline.current
     val status = LocalSyncStatus.current
     val acknowledge = LocalAcknowledgeSync.current
     var expanded by rememberSaveable { mutableStateOf(false) }
-    val label = when {
-        status.lastFailure != null -> "Revisar error de sincronización"
-        offline -> "Sin conexión: ${status.pending} cambios pendientes"
-        status.syncing -> "Sincronizando ${status.pending} cambios"
-        status.pending > 0 -> "${status.pending} cambios pendientes"
-        else -> "Sin cambios pendientes"
+    val indicator = syncIndicator(status, offline)
+    LaunchedEffect(indicator) { if (indicator == null) expanded = false }
+    if (indicator == null) return
+    val label = syncLabel(indicator, status.pending)
+    val icon = when (indicator) {
+        SyncIndicator.ERROR -> Icons.Outlined.ErrorOutline
+        SyncIndicator.OFFLINE -> Icons.Outlined.CloudOff
+        SyncIndicator.PENDING -> Icons.Outlined.CloudUpload
     }
-    IconButton(onClick = { expanded = true }) {
-        Icon(when { status.lastFailure != null -> Icons.Outlined.ErrorOutline; offline -> Icons.Outlined.CloudOff; status.pending > 0 -> Icons.Outlined.CloudUpload; else -> Icons.Outlined.CloudDone },
-            label, tint = if (status.lastFailure != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+    if (onPhoto) {
+        FilledTonalIconButton(
+            onClick = { expanded = true },
+            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = Color.Black.copy(alpha = 0.35f), contentColor = Color.White),
+            shape = CircleShape,
+        ) { Icon(icon, label) }
+    } else {
+        IconButton(onClick = { expanded = true }) {
+            Icon(icon, label, tint = if (indicator == SyncIndicator.PENDING) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+        }
     }
     if (expanded) AlertDialog(onDismissRequest = { expanded = false },
-        title = { Text("Conexión y cambios") },
+        title = { Text(label) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(label)
-            Text(if (offline) "Los cambios guardados en este dispositivo se enviarán cuando vuelva la conexión." else "Los cambios pendientes se envían automáticamente. Mantén la conexión para completar el envío.")
-            status.lastSyncedAt?.let { Text("Último envío confirmado: ${formatDateTime(it)}") }
-            status.lastFailure?.let { Text(it, color = MaterialTheme.colorScheme.error); Text("Un cambio rechazado puede haberse revertido. Revisa el registro antes de volver a guardarlo.") }
+            when (indicator) {
+                SyncIndicator.ERROR -> {
+                    status.lastFailure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    Text("Vuelve a intentarlo.")
+                }
+                SyncIndicator.OFFLINE -> Text("Los cambios guardados en este celular se enviarán cuando vuelva la conexión.")
+                SyncIndicator.PENDING -> Text("Los cambios se envían solos. Mantén la conexión hasta que terminen.")
+            }
+            status.lastSyncedAt?.let { Text("Último envío: ${formatWhen(it)}", style = MaterialTheme.typography.bodySmall) }
         } },
         confirmButton = { TextButton(onClick = { acknowledge(); expanded = false }) { Text("Entendido") } },
     )
@@ -144,8 +184,8 @@ fun LoadingBox(modifier: Modifier = Modifier) {
 @Composable
 fun UnavailableState(onBack: () -> Unit, modifier: Modifier = Modifier) {
     EmptyState(
-        Icons.Outlined.CloudOff, "No pudimos abrir este registro",
-        "Puede que ya no exista, no tengas acceso o aún no esté disponible en este dispositivo. Comprueba la conexión y vuelve a abrirlo.",
+        Icons.Outlined.SearchOff, "No encontramos esta información",
+        "Puede que se haya eliminado.",
         modifier,
         action = { TextButton(onClick = onBack) { Text("Volver") } },
     )

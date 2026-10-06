@@ -28,6 +28,17 @@ import com.lfergt.controltienda.ui.components.StorageImage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 data class CatalogData(
     val header: StoreHeader = StoreHeader(),
@@ -58,15 +69,44 @@ fun List<Product>.search(query: String): List<Product> {
     return filter { product -> words.all { normalizedSearch(product.name).contains(it) } || product.barcode?.contains(q, ignoreCase = true) == true || product.qrCode?.contains(q, ignoreCase = true) == true }
 }
 
+/** Filtro de categoría en un chip: "Categoría" o el nombre elegido; al tocarlo despliega las opciones. */
+@Composable
+fun CategoryFilterChip(categories: List<Category>, selected: String, onSelect: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val name = categories.firstOrNull { it.id == selected }?.name
+    Box {
+        FilterChip(
+            selected = selected != Category.ALL_ID,
+            onClick = { open = true },
+            label = { Text(name ?: "Categoría") },
+            trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null) },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("Todas las categorías") }, onClick = { open = false; onSelect(Category.ALL_ID) })
+            categories.forEach { category ->
+                DropdownMenuItem(text = { Text(category.name) }, onClick = { open = false; onSelect(category.id) })
+            }
+        }
+    }
+}
+
 fun normalizedSearch(value: String): String = Normalizer.normalize(value.trim().lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
 
 /** Detalle rápido de un producto (al tocarlo en "Ver productos"). */
 @Composable
-fun ProductDetailDialog(product: Product, currency: String, categoryName: String?, showStock: Boolean, onDismiss: () -> Unit) {
+fun ProductDetailDialog(
+    product: Product,
+    currency: String,
+    categoryName: String?,
+    showStock: Boolean,
+    onDismiss: () -> Unit,
+    action: Pair<String, () -> Unit>? = null,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.widthIn(max = 520.dp),
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },
+        dismissButton = action?.let { (label, run) -> { TextButton(onClick = run) { Text(label) } } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 StorageImage(product.photoPath, product.name, Modifier.fillMaxWidth().aspectRatio(1.3f))

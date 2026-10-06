@@ -5,7 +5,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material.icons.outlined.Search
 import com.lfergt.controltienda.ui.components.LocalSnackbar
 import com.lfergt.controltienda.ui.components.ProductSelectionSheet
 import androidx.activity.compose.BackHandler
@@ -34,10 +33,8 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.EditNote
-import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.ShoppingCart
-import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -86,14 +83,15 @@ import com.lfergt.controltienda.ui.components.ConfirmDialog
 import com.lfergt.controltienda.ui.components.DecimalInput
 import com.lfergt.controltienda.ui.components.Dropdown
 import com.lfergt.controltienda.ui.components.EmptyState
-import com.lfergt.controltienda.ui.components.ExpandableFab
-import com.lfergt.controltienda.ui.components.FabAction
 import com.lfergt.controltienda.ui.components.LoadingBox
 import com.lfergt.controltienda.ui.components.MoneyInput
 import com.lfergt.controltienda.ui.components.NoAccess
 import com.lfergt.controltienda.ui.components.StorageImage
 import com.lfergt.controltienda.ui.components.TextInput
 import com.lfergt.controltienda.ui.components.toDecimalOrNull
+import com.lfergt.controltienda.ui.components.AddActions
+import com.lfergt.controltienda.ui.components.SearchLauncher
+import com.lfergt.controltienda.ui.common.plural
 
 @Composable
 fun CreateOrderScreen(
@@ -127,15 +125,12 @@ fun CreateOrderScreen(
         subtitle = state.catalog.header.name,
         onBack = back,
         floatingActionButton = {
-            if (state.catalog.header.access.isStaff && !state.saving) {
-                ExpandableFab(
-                    icon = Icons.Outlined.Add,
-                    actions = listOf(
-                        FabAction("Buscar producto o código", Icons.Outlined.Search) { picking = true },
-                        FabAction("Escanear código de barras", Icons.Outlined.ViewWeek) { viewModel.openScanner(ScanMode.BARCODE) },
-                        FabAction("Escanear QR", Icons.Outlined.QrCode2) { viewModel.openScanner(ScanMode.QR) },
-                        FabAction("Introducción manual", Icons.Outlined.EditNote) { manualPrefill = ""; manualOpen = true },
-                    ),
+            if (state.catalog.loaded && state.catalog.header.access.isStaff && !state.saving) {
+                AddActions(
+                    onBarcode = { viewModel.openScanner(ScanMode.BARCODE) },
+                    onQr = { viewModel.openScanner(ScanMode.QR) },
+                    onManual = { manualPrefill = ""; manualOpen = true },
+                    manualLabel = "Agregar a mano",
                 )
             }
         },
@@ -155,34 +150,44 @@ fun CreateOrderScreen(
         when {
             !state.catalog.loaded -> LoadingBox(Modifier.padding(padding))
             !state.catalog.header.access.isStaff -> NoAccess(Modifier.padding(padding))
-            state.cart.isEmpty -> EmptyState(
-                Icons.Outlined.ShoppingCart,
-                "Empieza una venta",
-                "Busca un producto por nombre o código, escanéalo o agrega un ítem manual con el botón +.",
-                Modifier.padding(padding),
-            )
-            else -> LazyColumn(
-                modifier = Modifier.padding(padding),
-                contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                item {
-                    Row(Modifier.widthIn(max = 720.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Resumen (${state.cart.itemCount} ítems)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { confirmClear = true }, enabled = !state.saving) { Text("Vaciar") }
-                    }
-                }
-                items(state.cart.lines, key = { it.key }) { line ->
-                    CartLineRow(
-                        line = line,
-                        currency = currency,
-                        photoPath = line.item.productId?.let { id -> state.catalog.products.firstOrNull { it.id == id }?.photoPath },
-                        enabled = !state.saving,
-                        onEditQuantity = { editingQuantity = line.key },
-                        onQuantity = { if (it <= 0) removeLine(line) else viewModel.setQuantity(line.key, it) },
-                        onRemove = { removeLine(line) },
+            else -> Column(Modifier.padding(padding), horizontalAlignment = Alignment.CenterHorizontally) {
+                SearchLauncher(
+                    "Buscar producto por nombre o código",
+                    onClick = { if (!state.saving) picking = true },
+                    modifier = Modifier.widthIn(max = 720.dp).padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                )
+                if (state.cart.isEmpty) {
+                    EmptyState(
+                        Icons.Outlined.ShoppingCart,
+                        "Empieza una venta",
+                        "Busca un producto o escanéalo con los botones de abajo.",
+                        Modifier.weight(1f),
                     )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        item {
+                            Row(Modifier.widthIn(max = 720.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("Resumen · ${plural(state.cart.itemCount, "producto", "productos")}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { confirmClear = true }, enabled = !state.saving) { Text("Vaciar") }
+                            }
+                        }
+                        items(state.cart.lines, key = { it.key }) { line ->
+                            CartLineRow(
+                                line = line,
+                                currency = currency,
+                                photoPath = line.item.productId?.let { id -> state.catalog.products.firstOrNull { it.id == id }?.photoPath },
+                                enabled = !state.saving,
+                                onEditQuantity = { editingQuantity = line.key },
+                                onQuantity = { if (it <= 0) removeLine(line) else viewModel.setQuantity(line.key, it) },
+                                onRemove = { removeLine(line) },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -224,7 +229,7 @@ fun CreateOrderScreen(
     if (confirmExit) {
         ConfirmDialog(
             title = "¿Salir sin registrar?",
-            message = "La orden tiene productos que se perderán.",
+            message = "La venta tiene productos que se perderán.",
             confirmText = "Salir",
             onConfirm = onBack,
             onDismiss = { confirmExit = false },
@@ -244,7 +249,7 @@ private fun CartLineRow(line: CartLine, currency: String, photoPath: String?, en
                 Text(item.description, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     "${Money.format(item.unitPriceCents, currency)} x ${item.unit.formatQuantity(item.quantity)} ${item.unit.symbol}" +
-                        if (item.manual) " · manual" else "",
+                        if (item.manual) " · a mano" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -334,7 +339,7 @@ private fun ScanOverlay(
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                 )
-                                Text("En la orden: ${fb.product.unit.formatQuantity(fb.quantityInCart)} ${fb.product.unit.symbol}", color = Color.DarkGray, style = MaterialTheme.typography.bodySmall)
+                                Text("En la venta: ${fb.product.unit.formatQuantity(fb.quantityInCart)} ${fb.product.unit.symbol}", color = Color.DarkGray, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                         is ScanFeedback.Unknown -> Surface(color = Color.White, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -342,9 +347,9 @@ private fun ScanOverlay(
                                 Text("Código no registrado", color = Color.Black, style = MaterialTheme.typography.titleMedium)
                                 Text(fb.code, color = Color.DarkGray, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = { onManual("") }) { Text("Ingresar manual") }
+                                    OutlinedButton(onClick = { onManual("") }) { Text("Agregar a mano") }
                                     if (canRegister) {
-                                        FilledTonalButton(onClick = { onRegister((if (fb.isQr) "qr:" else "bar:") + fb.code) }) { Text("Registrar") }
+                                        FilledTonalButton(onClick = { onRegister((if (fb.isQr) "qr:" else "bar:") + fb.code) }) { Text("Crear producto") }
                                     }
                                 }
                             }
@@ -360,7 +365,7 @@ private fun ScanOverlay(
                 IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "Cerrar", tint = Color.White) }
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    "${state.cart.itemCount} ítems · ${Money.format(state.cart.totalCents, currency)}",
+                    "${plural(state.cart.itemCount, "producto", "productos")} · ${Money.format(state.cart.totalCents, currency)}",
                     color = Color.White,
                     style = MaterialTheme.typography.titleSmall,
                 )
@@ -368,7 +373,7 @@ private fun ScanOverlay(
             Button(
                 onClick = onClose,
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp).fillMaxWidth().height(52.dp),
-            ) { Text("Listo, ver resumen") }
+            ) { Text("Listo") }
         }
     }
 }
@@ -391,38 +396,41 @@ private fun ManualItemDialog(
     val qty = quantity.toDecimalOrNull()
     val valid = detail.isNotBlank() && priceCents != null && qty != null && qty > 0
 
+    var moreOptions by rememberSaveable { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.widthIn(max = 560.dp),
-        title = { Text("Ítem manual") },
+        title = { Text("Agregar a mano") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextInput(detail, { detail = it }, "Detalle *", singleLine = false)
-                Dropdown(
-                    label = "Categoría",
-                    options = listOf<Category?>(null) + categories,
-                    selected = categories.firstOrNull { it.id == categoryId },
-                    optionLabel = { it?.name ?: "Sin categoría" },
-                    onSelected = { categoryId = it?.id },
-                    placeholder = "Sin categoría",
-                )
+                TextInput(detail, { detail = it }, "Descripción *", singleLine = false)
                 MoneyInput(price, { price = it }, "Precio unitario *", currency)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DecimalInput(quantity, { quantity = it }, "Cantidad *", Modifier.weight(1f))
+                DecimalInput(quantity, { quantity = it }, "Cantidad *")
+                if (moreOptions) {
                     Dropdown(
                         label = "Unidad",
                         options = MeasureUnit.entries,
                         selected = unit,
                         optionLabel = { it.label },
                         onSelected = { unit = it },
-                        modifier = Modifier.weight(1f),
                     )
+                    Dropdown(
+                        label = "Categoría",
+                        options = listOf<Category?>(null) + categories,
+                        selected = categories.firstOrNull { it.id == categoryId },
+                        optionLabel = { it?.name ?: "Sin categoría" },
+                        onSelected = { categoryId = it?.id },
+                        placeholder = "Sin categoría",
+                    )
+                } else {
+                    TextButton(onClick = { moreOptions = true }) { Text("Más opciones: unidad y categoría") }
                 }
                 if (priceCents != null && qty != null) {
                     HorizontalDivider()
                     Text("Subtotal: ${Money.format(Money.lineTotal(priceCents, qty), currency)}", style = MaterialTheme.typography.titleSmall)
                 }
-                Text("Los ítems manuales no modifican el inventario.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No descuenta stock.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = {

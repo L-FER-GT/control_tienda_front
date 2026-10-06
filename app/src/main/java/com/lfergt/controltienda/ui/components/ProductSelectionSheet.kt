@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import com.lfergt.controltienda.domain.model.Money
 import com.lfergt.controltienda.domain.model.Product
 import com.lfergt.controltienda.feature.catalog.search
+import com.lfergt.controltienda.ui.common.plural
 
 /** Selector común: buscar también permite introducir un código sin usar cámara. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,7 +28,7 @@ fun ProductSelectionSheet(
             Text("Agregar productos", style = MaterialTheme.typography.titleLarge)
             SearchInput(query, { query = it }, "Buscar por nombre o código")
             val visible = products.search(query)
-            Text("${visible.size} resultados", style = MaterialTheme.typography.bodySmall)
+            if (query.isNotBlank()) Text(plural(visible.size, "resultado", "resultados"), style = MaterialTheme.typography.bodySmall)
             LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 420.dp)) {
                 if (visible.isEmpty()) item {
                     Text("No hay coincidencias. Prueba otro nombre o código.", Modifier.padding(vertical = 24.dp))

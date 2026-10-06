@@ -8,13 +8,13 @@ enum class ReportType(
     val needsLimit: Boolean = false,
 ) {
     SALES_BY_PERIOD("Ventas por periodo", "Total vendido por día, semana o mes", needsDateRange = true, needsGrouping = true),
-    SALES_BY_EMPLOYEE("Ventas por empleado", "Órdenes y montos de cada vendedor", needsDateRange = true),
+    SALES_BY_EMPLOYEE("Ventas por empleado", "Ventas y montos de cada vendedor", needsDateRange = true),
     SALES_BY_PAYMENT_METHOD("Ventas por método de pago", "Efectivo, tarjeta, Yape, Plin…", needsDateRange = true),
     TOP_PRODUCTS("Productos más vendidos", "Ranking por cantidad vendida", needsDateRange = true, needsLimit = true),
     SALES_BY_CATEGORY("Ventas por categoría", "Participación de cada categoría", needsDateRange = true),
     PROFIT("Ganancias", "Ventas menos costo de compra por producto", needsDateRange = true),
-    PURCHASES_BY_SUPPLIER("Compras por proveedor", "Recepciones de mercadería por proveedor", needsDateRange = true),
-    INVENTORY_VALUE("Inventario valorizado", "Stock actual valorizado al costo y al precio de venta", needsDateRange = false),
+    PURCHASES_BY_SUPPLIER("Compras por proveedor", "Compras registradas por proveedor", needsDateRange = true),
+    INVENTORY_VALUE("Stock valorizado", "Stock actual valorizado al costo y al precio de venta", needsDateRange = false),
 }
 
 enum class PeriodGrouping { DAY, WEEK, MONTH }

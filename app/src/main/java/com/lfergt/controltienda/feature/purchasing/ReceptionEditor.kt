@@ -84,7 +84,7 @@ import com.lfergt.controltienda.feature.scanner.ScannerDialog
 import com.lfergt.controltienda.navigation.ReceptionEditorRoute
 import com.lfergt.controltienda.ui.common.BaseViewModel
 import com.lfergt.controltienda.ui.common.CollectMessages
-import com.lfergt.controltienda.ui.common.formatDate
+import com.lfergt.controltienda.ui.common.formatDay
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.DecimalInput
 import com.lfergt.controltienda.ui.components.Dropdown
@@ -113,6 +113,13 @@ import com.lfergt.controltienda.ui.components.ProductSelectionSheet
 import com.lfergt.controltienda.ui.components.PhotoViewer
 import javax.inject.Inject
 import com.lfergt.controltienda.ui.components.UnavailableState
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import com.lfergt.controltienda.ui.theme.StatusColors
+
+/** Diferencia entre el total de la factura y la suma de productos; null si falta alguno o coinciden. */
+fun invoiceDifference(invoiceCents: Long?, hasLines: Boolean, linesCents: Long): Long? =
+    if (invoiceCents == null || !hasLines || invoiceCents == linesCents) null else invoiceCents - linesCents
 
 /** Línea editable: cantidad y costo como texto mientras se escriben. */
 data class LineForm(val productId: String, val productName: String, val unit: MeasureUnit, val quantity: String, val unitCost: String) : java.io.Serializable
@@ -246,6 +253,10 @@ class ReceptionEditorViewModel @Inject constructor(
             Money.lineTotal(cost, l.quantity.toDecimalOrNull() ?: 0.0)
         }
 
+    /** Factura menos suma de productos, si ambas existen y no coinciden. */
+    val invoiceDifferenceCents: Long?
+        get() = invoiceDifference(Money.parseToCents(_form.value.invoiceTotal), _form.value.lines.isNotEmpty(), linesTotalCents)
+
     fun save() {
         val f = _form.value
         if (f.saving) return
@@ -269,7 +280,7 @@ class ReceptionEditorViewModel @Inject constructor(
                         receivedAt = f.receivedAt,
                     ),
                 )
-                message(if (receptionId == null) "Recepción registrada: el stock se actualizará al sincronizar" else "Recepción actualizada")
+                message(if (receptionId == null) "Compra registrada: el stock se actualizará al sincronizar" else "Compra actualizada")
                 doneChannel.send(Unit)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -300,9 +311,17 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
     LaunchedEffect(Unit) { viewModel.done.collect { onBack() } }
 
     BackScaffold(
-        title = "Recepción de mercadería",
-        subtitle = if (viewModel.receptionId == null) "Nueva recepción" else "Editar recepción",
+        title = if (viewModel.receptionId == null) "Nueva compra" else "Editar compra",
+        subtitle = catalog.header.name,
         onBack = rememberGuardedBack(viewModel.dirty, form.saving, onBack),
+        bottomBar = {
+            if (catalog.loaded && form.loaded && !form.unavailable && catalog.header.access.can(Permission.RECEPTIONS)) {
+                Button(onClick = viewModel::save, enabled = !form.saving,
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(16.dp).height(52.dp)) {
+                    Text(if (form.saving) "Guardando…" else if (viewModel.receptionId == null) "Registrar compra" else "Guardar cambios")
+                }
+            }
+        },
     ) { padding ->
         when {
             form.unavailable -> UnavailableState(onBack, Modifier.padding(padding))
@@ -319,10 +338,17 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
                     )
                     OutlinedButton(onClick = { datePicker = true }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Outlined.CalendarMonth, null)
-                        Text("  Fecha de recepción: ${formatDate(form.receivedAt)}")
+                        Text("  Fecha de compra: ${formatDay(form.receivedAt)}")
                     }
 
                     Text("Productos recibidos", style = MaterialTheme.typography.titleMedium)
+                    if (form.lines.isEmpty()) {
+                        Text(
+                            "Puedes registrar solo la foto de la factura y completar los productos después.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     form.lines.forEachIndexed { index, line -> LineEditor(line, currency, { viewModel.updateLine(index, it) }, { viewModel.removeLine(index) }) }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { picking = true }, modifier = Modifier.weight(1f)) {
@@ -346,7 +372,14 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
                     }
                     HorizontalDivider()
                     MoneyInput(form.invoiceTotal, viewModel::setInvoiceTotal, "Total de la factura", currency, supporting = "Precio total de la factura o boleta")
-                    TextInput(form.notes, viewModel::setNotes, "Notas (N° de factura, observaciones)", singleLine = false)
+                    viewModel.invoiceDifferenceCents?.let {
+                        Text(
+                            "La factura dice ${Money.format(Money.parseToCents(form.invoiceTotal) ?: 0, currency)} y los productos suman ${Money.format(viewModel.linesTotalCents, currency)}.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = StatusColors.warning,
+                        )
+                    }
+                    TextInput(form.notes, viewModel::setNotes, "Notas", singleLine = false, supporting = "Ej.: factura 001-234")
 
                     Text("Fotos de la factura (${form.keptPhotos.size + form.newPhotos.size}/10)", style = MaterialTheme.typography.titleMedium)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -363,14 +396,6 @@ fun ReceptionEditorScreen(onBack: () -> Unit, viewModel: ReceptionEditorViewMode
                                 Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.AddAPhoto, if (form.keptPhotos.size + form.newPhotos.size >= 10) "Límite de 10 fotos" else "Agregar foto") }
                             }
                         }
-                    }
-                    Text(
-                        "Puedes registrar solo la foto de la factura y completar los productos después.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Button(onClick = viewModel::save, enabled = !form.saving, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                        Text(if (form.saving) "Guardando…" else if (viewModel.receptionId == null) "Registrar recepción" else "Guardar cambios")
                     }
                 }
             }

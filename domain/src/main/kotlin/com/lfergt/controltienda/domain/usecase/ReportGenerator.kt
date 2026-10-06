@@ -87,7 +87,7 @@ class ReportGenerator(private val zone: ZoneId = ZoneId.systemDefault()) {
         return Built(
             columns = listOf(
                 ReportColumn("Periodo", ColumnKind.TEXT),
-                ReportColumn("Órdenes", ColumnKind.NUMBER),
+                ReportColumn("Ventas", ColumnKind.NUMBER),
                 ReportColumn("Total", ColumnKind.MONEY),
                 ReportColumn("Ticket promedio", ColumnKind.MONEY),
             ),
@@ -117,7 +117,7 @@ class ReportGenerator(private val zone: ZoneId = ZoneId.systemDefault()) {
         return Built(
             columns = listOf(
                 ReportColumn("Empleado", ColumnKind.TEXT),
-                ReportColumn("Órdenes", ColumnKind.NUMBER),
+                ReportColumn("Ventas", ColumnKind.NUMBER),
                 ReportColumn("Total", ColumnKind.MONEY),
                 ReportColumn("Ticket promedio", ColumnKind.MONEY),
             ),
@@ -147,7 +147,7 @@ class ReportGenerator(private val zone: ZoneId = ZoneId.systemDefault()) {
         return Built(
             columns = listOf(
                 ReportColumn("Método de pago", ColumnKind.TEXT),
-                ReportColumn("Órdenes", ColumnKind.NUMBER),
+                ReportColumn("Ventas", ColumnKind.NUMBER),
                 ReportColumn("Total", ColumnKind.MONEY),
                 ReportColumn("% del total", ColumnKind.NUMBER),
             ),
@@ -165,7 +165,7 @@ class ReportGenerator(private val zone: ZoneId = ZoneId.systemDefault()) {
 
     private fun itemKey(item: OrderItem) = item.productId ?: "manual:${item.description.lowercase()}"
 
-    private fun itemName(item: OrderItem) = if (item.manual) "${item.description} (manual)" else item.description
+    private fun itemName(item: OrderItem) = if (item.manual) "${item.description} (a mano)" else item.description
 
     private fun topProducts(orders: List<Order>, limit: Int): Built {
         val aggregated = orders.flatMap { it.items }
@@ -254,7 +254,7 @@ class ReportGenerator(private val zone: ZoneId = ZoneId.systemDefault()) {
         val noCostRevenue = withoutCost.sumOf { it.subtotalCents }
         if (withoutCost.isNotEmpty()) {
             rows += listOf(
-                ReportCell.Text("Ítems sin costo registrado"),
+                ReportCell.Text("Productos sin costo registrado"),
                 ReportCell.Number(withoutCost.sumOf { it.quantity }, 2),
                 ReportCell.Amount(noCostRevenue),
                 ReportCell.Text("—"),
@@ -299,7 +299,7 @@ class ReportGenerator(private val zone: ZoneId = ZoneId.systemDefault()) {
         return Built(
             columns = listOf(
                 ReportColumn("Proveedor", ColumnKind.TEXT),
-                ReportColumn("Recepciones", ColumnKind.NUMBER),
+                ReportColumn("Compras", ColumnKind.NUMBER),
                 ReportColumn("Total comprado", ColumnKind.MONEY),
             ),
             rows = rows,

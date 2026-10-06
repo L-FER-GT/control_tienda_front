@@ -68,7 +68,7 @@ class ReportGeneratorTest {
         val table = run(ReportType.PROFIT)
         // a: ventas 1000 + 600 = 1600; costo 600 + 350 = 950; ganancia 650
         assertEquals(ReportCell.Amount(650), table.rows[0][4])
-        assertEquals(ReportCell.Text("Ítems sin costo registrado"), table.rows.last()[0])
+        assertEquals(ReportCell.Text("Productos sin costo registrado"), table.rows.last()[0])
         assertEquals(ReportCell.Amount(650), table.totals!![4])
     }
 

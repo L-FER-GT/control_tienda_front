@@ -22,15 +22,15 @@ import com.lfergt.controltienda.domain.model.StoreRole
 
 val StoreOption.label: String
     get() = when (this) {
-        StoreOption.VIEW_PRODUCTS -> "Ver productos"
-        StoreOption.CREATE_ORDER -> "Crear orden"
+        StoreOption.VIEW_PRODUCTS -> "Productos"
+        StoreOption.CREATE_ORDER -> "Nueva venta"
         StoreOption.MY_SALES -> "Mis ventas"
-        StoreOption.MANAGE_PRODUCTS -> "Gestionar productos"
+        StoreOption.MANAGE_PRODUCTS -> "Productos"
         StoreOption.CATEGORIES -> "Categorías"
         StoreOption.REPORTS -> "Reportes"
-        StoreOption.STOCK_ALERTS -> "Alertas de stock mínimo"
+        StoreOption.STOCK_ALERTS -> "Stock bajo"
         StoreOption.SUPPLIERS -> "Proveedores"
-        StoreOption.RECEPTIONS -> "Recepción de mercadería"
+        StoreOption.RECEPTIONS -> "Compras"
         StoreOption.MEMBERS -> "Empleados y clientes"
     }
 
@@ -50,13 +50,13 @@ val StoreOption.icon: ImageVector
 
 val Permission.label: String
     get() = when (this) {
-        Permission.VIEW_STOCK -> "Ver inventario"
+        Permission.VIEW_STOCK -> "Ver stock"
         Permission.MANAGE_PRODUCTS -> "Gestionar productos"
         Permission.MANAGE_CATEGORIES -> "Categorías"
         Permission.REPORTS -> "Reportes"
-        Permission.STOCK_ALERTS -> "Alertas de stock mínimo"
+        Permission.STOCK_ALERTS -> "Stock bajo"
         Permission.SUPPLIERS -> "Proveedores"
-        Permission.RECEPTIONS -> "Recepción de mercadería"
+        Permission.RECEPTIONS -> "Compras"
         Permission.MEMBERS -> "Empleados y clientes"
         Permission.EDIT_STORE -> "Editar tienda"
     }
@@ -67,7 +67,7 @@ val Permission.description: String
         Permission.MANAGE_PRODUCTS -> "Crea y edita productos, precios, fotos y códigos"
         Permission.MANAGE_CATEGORIES -> "Crea categorías y asigna productos"
         Permission.REPORTS -> "Ve los reportes y las ventas de todos"
-        Permission.STOCK_ALERTS -> "Ve los productos sin stock o bajo el mínimo"
+        Permission.STOCK_ALERTS -> "Ve los productos agotados o con stock bajo"
         Permission.SUPPLIERS -> "Registra y edita proveedores"
         Permission.RECEPTIONS -> "Registra compras; suma stock y actualiza costos"
         Permission.MEMBERS -> "Invita, habilita y da permisos a otros"

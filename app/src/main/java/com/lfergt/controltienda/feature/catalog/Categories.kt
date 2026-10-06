@@ -17,12 +17,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.automirrored.outlined.LabelOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -64,8 +62,6 @@ import com.lfergt.controltienda.ui.components.AdaptiveGrid
 import com.lfergt.controltienda.ui.components.BackScaffold
 import com.lfergt.controltienda.ui.components.ConfirmDialog
 import com.lfergt.controltienda.ui.components.EmptyState
-import com.lfergt.controltienda.ui.components.ExpandableFab
-import com.lfergt.controltienda.ui.components.FabAction
 import com.lfergt.controltienda.ui.components.LoadingBox
 import com.lfergt.controltienda.ui.components.NoAccess
 import com.lfergt.controltienda.ui.components.PhotoField
@@ -83,6 +79,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import javax.inject.Inject
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import com.lfergt.controltienda.ui.common.plural
 
 // ------------------------------------------------------------------ lista de categorías
 
@@ -155,8 +156,8 @@ fun CategoryDialog(initial: Category?, onDismiss: () -> Unit, busy: Boolean = fa
         title = { Text(if (initial == null) "Nueva categoría" else "Editar categoría") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextInput(name, { name = it }, "Nombre")
-                PhotoField(initial?.photoPath, photo, { photo = it.toString() }, label = "Foto (opcional)")
+                TextInput(name, { name = it }, "Nombre *")
+                PhotoField(initial?.photoPath, photo, { photo = it.toString() }, label = "Foto")
             }
         },
         confirmButton = { TextButton(onClick = { onSave(name, photo) }, enabled = !busy && name.isNotBlank()) { Text(if (busy) "Guardando…" else "Guardar") } },
@@ -165,8 +166,6 @@ fun CategoryDialog(initial: Category?, onDismiss: () -> Unit, busy: Boolean = fa
 }
 
 // ------------------------------------------------------------------ detalle de una categoría
-
-enum class PickerSource { UNCATEGORIZED, ALL }
 
 @HiltViewModel
 class CategoryDetailViewModel @Inject constructor(
@@ -215,13 +214,13 @@ class CategoryDetailViewModel @Inject constructor(
 }
 
 /**
- * Productos de una categoría. El botón + permite elegir entre "Productos sin categoría" o
- * "Todos los productos" para asignarlos; si alguno ya tiene otra categoría se pide confirmación.
+ * Productos de una categoría. "Agregar productos" permite elegirlos de toda la tienda (o solo los que
+ * no tienen categoría); si alguno ya tiene otra categoría se pide confirmación.
  */
 @Composable
 fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var picker by rememberSaveable { mutableStateOf<PickerSource?>(null) }
+    var picking by rememberSaveable { mutableStateOf(false) }
     var pendingConflicts by remember { mutableStateOf<Pair<List<Product>, List<Product>>?>(null) }
     var editing by rememberSaveable { mutableStateOf(false) }
     val saving by viewModel.saving.collectAsStateWithLifecycle()
@@ -235,8 +234,8 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
     LaunchedEffect(Unit) { viewModel.closed.collect { onBack() } }
 
     BackScaffold(
-        title = "Categorías",
-        subtitle = if (viewModel.isAll) "Todos" else category?.name,
+        title = if (viewModel.isAll) "Todos" else category?.name ?: "Categoría",
+        subtitle = state.header.name,
         onBack = onBack,
         actions = {
             if (allowed && !viewModel.isAll && category != null) {
@@ -245,13 +244,11 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
             }
         },
         floatingActionButton = {
-            if (allowed && !viewModel.isAll) {
-                ExpandableFab(
-                    icon = Icons.Outlined.Add,
-                    actions = listOf(
-                        FabAction("Todos los productos", Icons.Outlined.Apps) { picker = PickerSource.ALL },
-                        FabAction("Productos sin categoría", Icons.AutoMirrored.Outlined.LabelOff) { picker = PickerSource.UNCATEGORIZED },
-                    ),
+            if (allowed && !viewModel.isAll && category != null) {
+                ExtendedFloatingActionButton(
+                    onClick = { picking = true },
+                    icon = { Icon(Icons.Outlined.Add, null) },
+                    text = { Text("Agregar productos") },
                 )
             }
         },
@@ -274,11 +271,10 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
                     }
                     if (products.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            EmptyState(Icons.Outlined.Inventory2, "Sin productos", "Usa el botón + para agregar productos a esta categoría.")
+                            EmptyState(Icons.Outlined.Inventory2, "Sin productos", "Usa «Agregar productos» para sumar productos a esta categoría.")
                         }
                     }
                     items(products, key = { it.id }) { product ->
-                      Column {
                         ProductTile(
                             product = product,
                             currency = state.header.currency,
@@ -286,27 +282,21 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
                             extra = if (viewModel.isAll) state.categoryName(product.categoryId) ?: "Sin categoría" else null,
                             onClick = { detail = product },
                         )
-                        if (!viewModel.isAll) TextButton(onClick = { removing = product }) { Text("Quitar de categoría") }
-                      }
                     }
                 }
             }
         }
     }
 
-    picker?.let { source ->
-        val candidates = when (source) {
-            PickerSource.UNCATEGORIZED -> CategoryRules.uncategorized(state.products, state.categories)
-            PickerSource.ALL -> state.products.filter { it.categoryId != viewModel.categoryId }
-        }
+    if (picking) {
         ProductPickerSheet(
-            title = if (source == PickerSource.ALL) "Todos los productos" else "Productos sin categoría",
-            candidates = candidates,
+            candidates = state.products.filter { it.categoryId != viewModel.categoryId },
+            uncategorizedIds = CategoryRules.uncategorized(state.products, state.categories).map { it.id }.toSet(),
             currency = state.header.currency,
             categoryName = { state.categoryName(it) },
-            onDismiss = { picker = null },
+            onDismiss = { picking = false },
             onConfirm = { selected ->
-                picker = null
+                picking = false
                 val conflicts = CategoryRules.conflicts(selected, viewModel.categoryId)
                 if (conflicts.isEmpty()) viewModel.assign(selected) else pendingConflicts = selected to conflicts
             },
@@ -314,24 +304,30 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
     }
 
     pendingConflicts?.let { (selected, conflicts) ->
+        val target = category?.name ?: ""
         val message = if (conflicts.size == 1) {
-            val p = conflicts.first()
-            "\"${p.name}\" ya está en la categoría \"${state.categoryName(p.categoryId)}\". ¿Estás seguro que deseas cambiarlo?"
+            "\"${conflicts.first().name}\" se moverá a la categoría \"$target\"."
         } else {
-            "${conflicts.size} productos ya están en otra categoría:\n" +
+            "Estos productos se moverán a la categoría \"$target\":\n" +
                 conflicts.take(6).joinToString("\n") { "• ${it.name} (${state.categoryName(it.categoryId)})" } +
-                (if (conflicts.size > 6) "\n…" else "") + "\n¿Estás seguro que deseas cambiarlos?"
+                (if (conflicts.size > 6) "\n…" else "")
         }
         ConfirmDialog(
             title = "Cambiar de categoría",
             message = message,
-            confirmText = "Sí, cambiar",
+            confirmText = "Mover",
             onConfirm = { viewModel.assign(selected) },
             onDismiss = { pendingConflicts = null },
         )
     }
 
-    detail?.let { ProductDetailDialog(it, state.header.currency, state.categoryName(it.categoryId), false) { detail = null } }
+    detail?.let { product ->
+        ProductDetailDialog(
+            product, state.header.currency, state.categoryName(product.categoryId), showStock = false,
+            onDismiss = { detail = null },
+            action = if (allowed && !viewModel.isAll) "Quitar de la categoría" to { detail = null; removing = product } else null,
+        )
+    }
     removing?.let { product ->
         ConfirmDialog(
             title = "Quitar de la categoría",
@@ -358,20 +354,22 @@ fun CategoryDetailScreen(onBack: () -> Unit, viewModel: CategoryDetailViewModel 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProductPickerSheet(
-    title: String,
     candidates: List<Product>,
+    uncategorizedIds: Set<String>,
     currency: String,
     categoryName: (String?) -> String?,
     onDismiss: () -> Unit,
     onConfirm: (List<Product>) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
+    var onlyUncategorized by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(setOf<String>()) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text("Agregar productos", style = MaterialTheme.typography.titleLarge)
             SearchInput(query, { query = it }, "Buscar producto")
-            val visible = candidates.search(query)
+            FilterChip(selected = onlyUncategorized, onClick = { onlyUncategorized = !onlyUncategorized }, label = { Text("Solo sin categoría") })
+            val visible = candidates.filter { !onlyUncategorized || it.id in uncategorizedIds }.search(query)
             Box(Modifier.heightIn(max = 420.dp)) {
                 if (visible.isEmpty()) {
                     Text("No hay productos para mostrar.", modifier = Modifier.padding(16.dp))
@@ -380,14 +378,15 @@ private fun ProductPickerSheet(
                     items(visible, key = { it.id }) { product ->
                         val checked = product.id in selected
                         ListItem(
+                            modifier = Modifier.toggleable(value = checked, role = Role.Checkbox) {
+                                selected = if (it) selected + product.id else selected - product.id
+                            },
                             leadingContent = { StorageImage(product.photoPath, null, Modifier.size(44.dp)) },
                             headlineContent = { Text(product.name) },
                             supportingContent = {
                                 Text(Money.format(product.salePriceCents, currency) + " · " + (categoryName(product.categoryId) ?: "Sin categoría"))
                             },
-                            trailingContent = {
-                                Checkbox(checked = checked, onCheckedChange = { selected = if (it) selected + product.id else selected - product.id })
-                            },
+                            trailingContent = { Checkbox(checked = checked, onCheckedChange = null) },
                         )
                     }
                 }
@@ -396,7 +395,7 @@ private fun ProductPickerSheet(
                 onClick = { onConfirm(candidates.filter { it.id in selected }) },
                 enabled = selected.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            ) { Text(if (selected.isEmpty()) "Selecciona productos" else "Asignar ${selected.size} a esta categoría") }
+            ) { Text(if (selected.isEmpty()) "Selecciona productos" else "Agregar ${plural(selected.size, "producto", "productos")}") }
         }
     }
 }

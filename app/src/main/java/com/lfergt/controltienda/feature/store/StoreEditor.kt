@@ -162,7 +162,7 @@ fun StoreEditorScreen(onBack: () -> Unit, onSaved: (String, Boolean) -> Unit, vi
                     currentPath = state.photoPath,
                     pickedUri = state.pickedPhoto,
                     onPicked = { viewModel.onPhoto(it.toString()) },
-                    label = "Foto de la tienda (opcional)",
+                    label = "Foto de la tienda",
                 )
                 TextInput(state.name, viewModel::onName, "Nombre de la tienda *", error = state.errors["name"])
                 TextInput(

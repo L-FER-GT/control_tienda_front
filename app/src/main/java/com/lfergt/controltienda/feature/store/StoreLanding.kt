@@ -122,6 +122,23 @@ class StoreLandingViewModel @Inject constructor(
     }
 }
 
+data class LandingSection(val title: String, val options: List<StoreOption>)
+
+/**
+ * Accesos del inicio de la tienda en dos grupos. "Nueva venta" va aparte, como botón principal, y
+ * "Categorías" vive dentro de "Productos". Un solo acceso "Productos": la gestión si hay permiso, si no la vista.
+ */
+fun landingSections(options: List<StoreOption>): List<LandingSection> {
+    val products = when {
+        StoreOption.MANAGE_PRODUCTS in options -> StoreOption.MANAGE_PRODUCTS
+        StoreOption.VIEW_PRODUCTS in options -> StoreOption.VIEW_PRODUCTS
+        else -> null
+    }
+    val daily = listOfNotNull(StoreOption.MY_SALES.takeIf { it in options }, products, StoreOption.STOCK_ALERTS.takeIf { it in options })
+    val admin = listOf(StoreOption.RECEPTIONS, StoreOption.SUPPLIERS, StoreOption.REPORTS, StoreOption.MEMBERS).filter { it in options }
+    return listOf(LandingSection("Día a día", daily), LandingSection("Administración", admin)).filter { it.options.isNotEmpty() }
+}
+
 @Composable
 fun StoreLandingScreen(
     onBack: () -> Unit,
@@ -162,16 +179,28 @@ fun StoreLandingScreen(
                 ) {
                     if (header.access.isStaff) item(span = { GridItemSpan(maxLineSpan) }) {
                         Button(onClick = { onOption(StoreOption.CREATE_ORDER) }, modifier = Modifier.fillMaxWidth()) {
+                            Icon(StoreOption.CREATE_ORDER.icon, contentDescription = null)
                             Text("Nueva venta", modifier = Modifier.padding(8.dp))
                         }
                     }
-                    items(state.options.filter { !header.access.isStaff || it != StoreOption.CREATE_ORDER }) { option ->
-                        OptionTile(
-                            label = option.label,
-                            icon = option.icon,
-                            badgeCount = if (option == StoreOption.STOCK_ALERTS) state.stockAlerts else 0,
-                            onClick = { onOption(option) },
-                        )
+                    val sections = landingSections(state.options)
+                    sections.forEach { section ->
+                        if (sections.size > 1) item(key = section.title, span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                section.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        items(section.options, key = { it.name }) { option ->
+                            OptionTile(
+                                label = option.label,
+                                icon = option.icon,
+                                badgeCount = if (option == StoreOption.STOCK_ALERTS) state.stockAlerts else 0,
+                                onClick = { onOption(option) },
+                            )
+                        }
                     }
                 }
             }
@@ -227,7 +256,7 @@ private fun StorePhotoHeader(header: StoreHeader, onBack: () -> Unit, onEdit: ((
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
             }
             Row {
-                OfflineIcon()
+                OfflineIcon(onPhoto = true)
                 if (onEdit != null) {
                     FilledTonalIconButton(onClick = onEdit, colors = buttonColors, shape = CircleShape) {
                         Icon(Icons.Outlined.Edit, contentDescription = "Editar tienda")

@@ -239,8 +239,8 @@ fun SupplierEditorScreen(onBack: () -> Unit, viewModel: SupplierEditorViewModel 
     LaunchedEffect(Unit) { viewModel.done.collect { onBack() } }
 
     BackScaffold(
-        title = "Proveedores",
-        subtitle = if (viewModel.supplierId == null) "Nuevo proveedor" else form.companyName,
+        title = if (viewModel.supplierId == null) "Nuevo proveedor" else "Editar proveedor",
+        subtitle = header.name,
         onBack = rememberGuardedBack(viewModel.dirty, form.saving, onBack),
         actions = {
             if (viewModel.supplierId != null) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.DeleteOutline, "Eliminar") }
@@ -270,7 +270,7 @@ fun SupplierEditorScreen(onBack: () -> Unit, viewModel: SupplierEditorViewModel 
     if (confirmDelete) {
         ConfirmDialog(
             title = "¿Eliminar proveedor?",
-            message = "Las recepciones registradas con este proveedor se conservan.",
+            message = "Las compras registradas con este proveedor se conservan.",
             confirmText = "Eliminar",
             onConfirm = viewModel::delete,
             onDismiss = { confirmDelete = false },

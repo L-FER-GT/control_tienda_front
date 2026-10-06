@@ -39,9 +39,14 @@ import com.lfergt.controltienda.ui.components.SearchInput
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
-import com.lfergt.controltienda.ui.components.Dropdown
 import androidx.compose.material3.Text
 import javax.inject.Inject
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import com.lfergt.controltienda.ui.common.plural
 
 // ------------------------------------------------------------------ categorías (primer nivel)
 
@@ -55,7 +60,7 @@ class ViewCategoriesViewModel @Inject constructor(savedState: SavedStateHandle, 
 @Composable
 fun ViewCategoriesScreen(onBack: () -> Unit, onCategory: (String) -> Unit, viewModel: ViewCategoriesViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    BackScaffold(title = state.header.name, onBack = onBack) { padding ->
+    BackScaffold(title = "Categorías", subtitle = state.header.name, onBack = onBack) { padding ->
         when {
             !state.loaded -> LoadingBox(Modifier.padding(padding))
             !state.header.access.active -> NoAccess(Modifier.padding(padding))
@@ -70,7 +75,7 @@ fun CategoryGrid(state: CatalogData, modifier: Modifier, onCategory: (String) ->
         item(key = Category.ALL_ID) {
             PhotoTile(
                 title = "Todos",
-                subtitle = "${state.products.size} productos",
+                subtitle = plural(state.products.size, "producto", "productos"),
                 photoPath = null,
                 placeholderIcon = Icons.Outlined.Apps,
                 onClick = { onCategory(Category.ALL_ID) },
@@ -79,7 +84,7 @@ fun CategoryGrid(state: CatalogData, modifier: Modifier, onCategory: (String) ->
         items(state.categories, key = { it.id }) { category ->
             PhotoTile(
                 title = category.name,
-                subtitle = "${state.countIn(category.id)} productos",
+                subtitle = plural(state.countIn(category.id), "producto", "productos"),
                 photoPath = category.photoPath,
                 placeholderIcon = Icons.Outlined.Category,
                 onClick = { onCategory(category.id) },
@@ -99,15 +104,21 @@ class ViewProductsViewModel @Inject constructor(savedState: SavedStateHandle, so
 
 /** Productos en cajas con foto, nombre y precio. El inventario solo con permiso (el dueño siempre). */
 @Composable
-fun ViewProductsScreen(onBack: () -> Unit, viewModel: ViewProductsViewModel = hiltViewModel()) {
+fun ViewProductsScreen(onBack: () -> Unit, onCategories: () -> Unit, viewModel: ViewProductsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var detail by remember { mutableStateOf<Product?>(null) }
     var selectedCategory by rememberSaveable { mutableStateOf(viewModel.categoryId) }
-    val categoryName = if (selectedCategory == Category.ALL_ID) "Todos" else state.categoryName(selectedCategory) ?: ""
     val showStock = state.header.access.can(Permission.VIEW_STOCK)
 
-    BackScaffold(title = "Productos", subtitle = state.header.name, onBack = onBack) { padding ->
+    BackScaffold(
+        title = "Productos", subtitle = state.header.name, onBack = onBack,
+        actions = {
+            if (state.header.access.can(Permission.MANAGE_CATEGORIES)) {
+                IconButton(onClick = onCategories) { Icon(Icons.Outlined.Category, "Categorías") }
+            }
+        },
+    ) { padding ->
         if (!state.loaded) {
             LoadingBox(Modifier.padding(padding))
             return@BackScaffold
@@ -115,12 +126,15 @@ fun ViewProductsScreen(onBack: () -> Unit, viewModel: ViewProductsViewModel = hi
         if (!state.header.access.active) { NoAccess(Modifier.padding(padding)); return@BackScaffold }
         val products = CategoryRules.productsOf(selectedCategory, state.products).search(query)
         AdaptiveGrid(minCellSize = 150.dp, modifier = Modifier.padding(padding), contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 32.dp)) {
-            item(span = { GridItemSpan(maxLineSpan) }) { SearchInput(query, { query = it }, "Buscar por nombre o código") }
             item(span = { GridItemSpan(maxLineSpan) }) {
-                Dropdown("Categoría", listOf(Category.ALL_ID) + state.categories.map { it.id }, selectedCategory,
-                    { if (it == Category.ALL_ID) "Todos los productos" else state.categoryName(it) ?: "Sin categoría" }, { selectedCategory = it })
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SearchInput(query, { query = it }, "Buscar por nombre o código")
+                    if (state.categories.isNotEmpty()) CategoryFilterChip(state.categories, selectedCategory) { selectedCategory = it }
+                    if (query.isNotBlank() || selectedCategory != Category.ALL_ID) {
+                        Text(plural(products.size, "producto", "productos"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
-            item(span = { GridItemSpan(maxLineSpan) }) { Text("${products.size} productos · $categoryName") }
             if (products.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     EmptyState(Icons.Outlined.Inventory2, "No hay productos", if (query.isBlank()) "Esta categoría aún no tiene productos." else "Prueba con otro nombre.")

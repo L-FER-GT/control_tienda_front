@@ -166,8 +166,8 @@ fun SettingsScreen(
                 }
                 MyCodeCard(profile)
                 Text("Mis datos", style = MaterialTheme.typography.titleMedium)
-                TextInput(form.name, viewModel::onName, "Nombre")
-                TextInput(form.phone, viewModel::onPhone, "Teléfono (opcional)", keyboardType = KeyboardType.Phone)
+                TextInput(form.name, viewModel::onName, "Nombre *")
+                TextInput(form.phone, viewModel::onPhone, "Teléfono", keyboardType = KeyboardType.Phone)
                 TextInput(profile.email ?: "", {}, "Correo", enabled = false)
                 Button(onClick = viewModel::save, enabled = !form.saving, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                     Text(if (form.saving) "Guardando…" else "Guardar cambios")
@@ -188,16 +188,10 @@ fun SettingsScreen(
                     }) }
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text("Zona de peligro", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
-                Text(
-                    "Al eliminar tu cuenta se borran tus datos personales y tus tiendas quedan deshabilitadas. No se puede deshacer.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedButton(
+                TextButton(
                     onClick = { confirmDelete = true },
                     enabled = !form.deleting && !profile.isSuperadmin,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Eliminar mi cuenta") }
                 Text(
@@ -260,7 +254,7 @@ private fun DeleteAccountDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
         title = { Text("¿Eliminar tu cuenta?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Escribe ELIMINAR para confirmar. Esta acción requiere conexión y no se puede deshacer.")
+                Text("Se borran tus datos personales y tus tiendas quedan deshabilitadas. No se puede deshacer y requiere conexión.\n\nEscribe ELIMINAR para confirmar.")
                 OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true)
             }
         },
