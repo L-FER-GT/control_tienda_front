@@ -14,6 +14,7 @@ import com.lfergt.controltienda.data.repository.StoreRepositoryImpl
 import com.lfergt.controltienda.data.repository.SupplierRepositoryImpl
 import com.lfergt.controltienda.data.repository.UserRepositoryImpl
 import com.lfergt.controltienda.data.system.ConnectivityMonitorImpl
+import com.lfergt.controltienda.data.system.LastStorePreferenceImpl
 import com.lfergt.controltienda.data.system.SyncMonitorImpl
 import com.lfergt.controltienda.data.update.GitHubApi
 import com.lfergt.controltienda.data.update.GitHubHttp
@@ -24,6 +25,7 @@ import com.lfergt.controltienda.domain.port.AuthRepository
 import com.lfergt.controltienda.domain.port.CatalogRepository
 import com.lfergt.controltienda.domain.port.Clock
 import com.lfergt.controltienda.domain.port.ConnectivityMonitor
+import com.lfergt.controltienda.domain.port.LastStorePreference
 import com.lfergt.controltienda.domain.port.MemberRepository
 import com.lfergt.controltienda.domain.port.NotificationRepository
 import com.lfergt.controltienda.domain.port.OrderRepository
@@ -65,6 +67,7 @@ abstract class RepositoryModule {
     @Binds abstract fun exporter(impl: ReportExporterImpl): ReportExporter
     @Binds abstract fun connectivity(impl: ConnectivityMonitorImpl): ConnectivityMonitor
     @Binds abstract fun sync(impl: SyncMonitorImpl): SyncMonitor
+    @Binds abstract fun lastStore(impl: LastStorePreferenceImpl): LastStorePreference
     @Binds abstract fun updates(impl: GitHubUpdates): AppUpdates
 }
 

@@ -27,9 +27,13 @@ import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.withFrameNanos
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.lfergt.controltienda.domain.port.AuthRepository
 import com.lfergt.controltienda.domain.port.ConnectivityMonitor
+import com.lfergt.controltienda.domain.port.LastStorePreference
 import com.lfergt.controltienda.domain.port.SyncMonitor
 import com.lfergt.controltienda.feature.update.UpdateDialogs
 import com.lfergt.controltienda.feature.update.UpdateViewModel
@@ -37,6 +41,7 @@ import com.lfergt.controltienda.navigation.AppNavHost
 import com.lfergt.controltienda.navigation.HomeRoute
 import com.lfergt.controltienda.navigation.LoginRoute
 import com.lfergt.controltienda.navigation.NotificationsRoute
+import com.lfergt.controltienda.navigation.StoreLandingRoute
 import com.lfergt.controltienda.ui.components.LocalOffline
 import com.lfergt.controltienda.ui.components.LocalSnackbar
 import com.lfergt.controltienda.ui.theme.ControlTiendaTheme
@@ -55,6 +60,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var connectivity: ConnectivityMonitor
     @Inject lateinit var sync: SyncMonitor
     @Inject lateinit var supabase: SupabaseAuth
+    @Inject lateinit var lastStore: LastStorePreference
 
     private var openNotifications by mutableStateOf(false)
     private var recoveryLink by mutableStateOf<android.net.Uri?>(null)
@@ -66,10 +72,14 @@ class MainActivity : ComponentActivity() {
         recoveryLink = intent?.data?.takeIf { it.scheme == "controltienda" }
         openNotifications = intent?.getBooleanExtra(EXTRA_OPEN_NOTIFICATIONS, false) == true
         // Con sesión guardada se entra directo a la lista de tiendas: el login es solo la primera vez.
-        val start: Any = if (auth.currentSession() != null) HomeRoute else LoginRoute
+        val session = auth.currentSession()
+        val start: Any = if (session != null) HomeRoute else LoginRoute
+        // Al abrir la app (no al recrearla: Navigation ya restaura su pila) se vuelve a la tienda que quedó abierta,
+        // encima de la lista para poder retroceder a otra tienda.
+        val reopenStore = if (savedInstanceState == null && session != null) lastStore.get(session.uid) else null
         setContent {
             ControlTiendaTheme {
-                AppRoot(start)
+                AppRoot(start, reopenStore)
             }
         }
     }
@@ -81,8 +91,9 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun AppRoot(start: Any) {
+    private fun AppRoot(start: Any, reopenStore: String?) {
         val navController = rememberNavController()
+        var animateNavigation by remember { mutableStateOf(reopenStore == null) }
         val snackbar = remember { SnackbarHostState() }
         val recoveryScope = rememberCoroutineScope()
         var recovering by remember { mutableStateOf(false) }
@@ -137,6 +148,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Recuerda la tienda abierta (cualquier pantalla dentro de ella); al volver a la lista se olvida.
+        LaunchedEffect(session?.uid) {
+            val uid = session?.uid ?: return@LaunchedEffect
+            if (!animateNavigation && reopenStore != null) {
+                navController.navigate(StoreLandingRoute(reopenStore))
+                // La transición se decide al recomponer; luego se reactivan las animaciones.
+                withFrameNanos { }
+                withFrameNanos { }
+                animateNavigation = true
+            }
+            navController.currentBackStack.collect { entries ->
+                val store = entries.lastOrNull { it.destination.hasRoute<StoreLandingRoute>() }?.toRoute<StoreLandingRoute>()?.storeId
+                lastStore.set(uid, store)
+            }
+        }
+
         LaunchedEffect(openNotifications, session?.uid) {
             if (openNotifications && session != null) {
                 openNotifications = false
@@ -148,7 +175,7 @@ class MainActivity : ComponentActivity() {
             LocalSyncStatus provides syncStatus,
             LocalAcknowledgeSync provides sync::acknowledgeFailure,
             LocalUpdater provides updater) {
-            AppNavHost(navController = navController, startDestination = start)
+            AppNavHost(navController = navController, startDestination = start, animate = { animateNavigation })
             com.lfergt.controltienda.ui.common.CollectMessages(updater)
             UpdateDialogs(updater)
         }

@@ -43,6 +43,13 @@ interface SyncMonitor {
     fun acknowledgeFailure() {}
 }
 
+/** Tienda que cada usuario dejó abierta, para volver a ella al iniciar la app. */
+interface LastStorePreference {
+    fun get(uid: String): String?
+    /** null olvida la tienda: el usuario volvió a la lista. */
+    fun set(uid: String, storeId: String?)
+}
+
 /** Versiones de la app publicadas fuera de una tienda de apps (Releases de GitHub). */
 interface AppUpdates {
     /** false en compilaciones sin canal de publicación (debug o locales). */

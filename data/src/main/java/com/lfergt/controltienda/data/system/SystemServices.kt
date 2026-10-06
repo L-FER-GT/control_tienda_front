@@ -14,6 +14,7 @@ import com.lfergt.controltienda.domain.error.DomainError
 import com.lfergt.controltienda.domain.error.userMessage
 import com.lfergt.controltienda.domain.model.UserProfile
 import com.lfergt.controltienda.domain.port.ConnectivityMonitor
+import com.lfergt.controltienda.domain.port.LastStorePreference
 import com.lfergt.controltienda.domain.port.SyncMonitor
 import com.lfergt.controltienda.domain.port.SyncStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,18 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** SharedPreferences: se lee de forma síncrona al crear la actividad, antes de dibujar la primera pantalla. */
+@Singleton
+class LastStorePreferenceImpl @Inject constructor(@ApplicationContext context: Context) : LastStorePreference {
+    private val prefs = context.getSharedPreferences("navigation", Context.MODE_PRIVATE)
+    override fun get(uid: String): String? = prefs.getString(key(uid), null)
+    override fun set(uid: String, storeId: String?) {
+        if (get(uid) == storeId) return
+        prefs.edit().apply { if (storeId == null) remove(key(uid)) else putString(key(uid), storeId) }.apply()
+    }
+    private fun key(uid: String) = "last_store_$uid"
+}
 
 @Singleton
 class SyncMonitorImpl @Inject constructor() : SyncMonitor {

@@ -2,6 +2,8 @@ package com.lfergt.controltienda.navigation
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -67,16 +69,17 @@ private val slideOutToRight = slideOutHorizontally(navSpec) { width -> width }
 private val pushAside = slideOutHorizontally(navSpec) { width -> -width / 4 }
 private val returnFromAside = slideInHorizontally(navSpec) { width -> -width / 4 }
 
+/** [animate] en false muestra el cambio sin deslizar (al reabrir la última tienda al iniciar). */
 @Composable
-fun AppNavHost(navController: NavHostController, startDestination: Any) {
+fun AppNavHost(navController: NavHostController, startDestination: Any, animate: () -> Boolean = { true }) {
     val back: () -> Unit = { navController.popBackStack() }
 
     NavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        enterTransition = { slideInFromRight },
-        exitTransition = { pushAside },
+        enterTransition = { if (animate()) slideInFromRight else EnterTransition.None },
+        exitTransition = { if (animate()) pushAside else ExitTransition.None },
         popEnterTransition = { returnFromAside },
         popExitTransition = { slideOutToRight },
         // Por defecto el gesto usa otra animación (la anterior aparece con fundido y la actual se encoge).
