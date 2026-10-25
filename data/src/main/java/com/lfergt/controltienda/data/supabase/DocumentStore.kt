@@ -57,6 +57,7 @@ class DocumentStore @Inject constructor(
     private val revision = MutableStateFlow(0L)
     private val refreshMutex = Mutex()
     private val pollCache = mutableMapOf<String, Pair<String, String>>()
+    private companion object { const val FIRST_SYNC_GRACE_MS = 3_000L }
     private fun uid() = auth.currentUser?.uid ?: throw DomainError.Auth("Debes iniciar sesión")
 
     private fun pendingCount(user: String): Int = local.readableDatabase.rawQuery("SELECT COUNT(*) FROM outbox WHERE uid=?", arrayOf(user)).use { it.moveToFirst(); it.getInt(0) }
@@ -235,6 +236,9 @@ class DocumentStore @Inject constructor(
         val knownUser = auth.currentUser?.uid
         // Si esta consulta ya se sincronizó antes, la caché local (incluso vacía) se muestra al instante.
         val attempted = MutableStateFlow(knownUser != null && withContext(Dispatchers.IO) { syncedBefore(knownUser, query) })
+        // Primera sincronización de una consulta sin datos locales: la red no puede bloquear la pantalla
+        // más de unos segundos; se muestra lo que haya en la base local y se completa al llegar la nube.
+        if (!attempted.value) launch { delay(FIRST_SYNC_GRACE_MS); attempted.value = true }
         launch { combine(revision, auth.session, attempted) { _, session, ready -> session to ready }.collect { (session, ready) ->
             val snapshot = if (session == null) QuerySnapshot(emptyList()) else cached(query)
             if (session == null || ready || snapshot.documents.isNotEmpty()) send(snapshot)
