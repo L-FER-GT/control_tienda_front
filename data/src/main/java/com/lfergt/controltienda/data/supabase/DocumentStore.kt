@@ -29,13 +29,20 @@ object FieldValue { fun serverTimestamp(): Map<String, Boolean> = mapOf("\$serve
 fun Long.toTimestamp(): Long = this
 
 /** Confirmed server data and durable outbox are separate: rejected writes can be rolled back. */
-internal class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "supabase_offline.db", null, 1) {
+internal class LocalDatabase(context: Context) : SQLiteOpenHelper(context, "supabase_offline.db", null, 2) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE documents (uid TEXT NOT NULL, path TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(uid,path))")
         db.execSQL("CREATE TABLE outbox (seq INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL, id TEXT NOT NULL UNIQUE, operations TEXT NOT NULL, created INTEGER NOT NULL)")
         db.execSQL("CREATE INDEX outbox_user ON outbox(uid,seq)")
+        db.execSQL(SYNCED_TABLE)
     }
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) db.execSQL(SYNCED_TABLE)
+    }
+    private companion object {
+        /** Consultas que ya se sincronizaron alguna vez: su caché local, aunque esté vacía, es fiable. */
+        const val SYNCED_TABLE = "CREATE TABLE IF NOT EXISTS synced_queries (uid TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY(uid,key))"
+    }
 }
 
 @Singleton
@@ -131,6 +138,16 @@ class DocumentStore @Inject constructor(
         db.insertWithOnConflict("documents", null, ContentValues().apply { put("uid",user); put("path",path); put("data",data) }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    private fun queryKey(query: Query) = jsonValue(query.spec).toString()
+
+    private fun syncedBefore(user: String, query: Query): Boolean =
+        local.readableDatabase.rawQuery("SELECT 1 FROM synced_queries WHERE uid=? AND key=?", arrayOf(user, queryKey(query))).use { it.moveToFirst() }
+
+    private fun markSynced(user: String, query: Query) {
+        local.writableDatabase.insertWithOnConflict("synced_queries", null,
+            ContentValues().apply { put("uid", user); put("key", queryKey(query)) }, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
     internal suspend fun cached(query: Query): QuerySnapshot = withContext(Dispatchers.IO) {
         val user = uid()
         val documents = linkedMapOf<String, DocumentSnapshot>()
@@ -161,12 +178,14 @@ class DocumentStore @Inject constructor(
     internal suspend fun refresh(query: Query) = refreshMutex.withLock { withContext(Dispatchers.IO) {
         val user=uid(); var offset=0; val rows=mutableListOf<JSONObject>()
         val max=(query.spec["limit"] as? Number)?.toInt() ?: Int.MAX_VALUE
+        var changed=false
         while (offset < max) {
             val limit=minOf(500,max-offset)
             val page=query.spec+mapOf("limit" to limit,"offset" to offset)
             val cacheKey=user+":"+jsonValue(page).toString()
             val previous=pollCache[cacheKey]
             val response=JSONObject(auth.request("/rest/v1/rpc/ct_poll",data=mapOf("query" to page,"etag" to previous?.first),expectedUid=user))
+            if(!response.isNull("rows") || previous==null) changed=true
             val result=if(response.isNull("rows")) JSONArray(previous?.second ?: "[]") else response.getJSONArray("rows")
             pollCache[cacheKey]=response.getString("etag") to result.toString()
             if(pollCache.size>128) pollCache.remove(pollCache.keys.first())
@@ -194,9 +213,10 @@ class DocumentStore @Inject constructor(
                 // have changed category or moved beyond the limit. Revalidate it individually.
                 val current = JSONArray(auth.request("/rest/v1/rpc/ct_query",
                     data = mapOf("query" to mapOf("document" to row.reference.path)), expectedUid = user))
-                if (current.length() > 0) { rows += current.getJSONObject(0); continue }
+                if (current.length() > 0) { rows += current.getJSONObject(0); changed = true; continue }
             }
             remove += row.reference.path
+            changed = true
         }
         if (auth.currentUser?.uid != user) return@withContext
         db.beginTransaction()
@@ -205,11 +225,16 @@ class DocumentStore @Inject constructor(
             rows.forEach { put(db,user,it.getString("path"),it.getJSONObject("data").toString()) }
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
-        revision.value++
+        val firstSync = !syncedBefore(user, query)
+        if (firstSync) markSynced(user, query)
+        // Sin cambios en la nube no hace falta que todos los observadores vuelvan a leer la base local.
+        if (changed || firstSync) revision.value++
     } }
 
     internal fun observe(query: Query): Flow<QuerySnapshot> = channelFlow {
-        val attempted = MutableStateFlow(false)
+        val knownUser = auth.currentUser?.uid
+        // Si esta consulta ya se sincronizó antes, la caché local (incluso vacía) se muestra al instante.
+        val attempted = MutableStateFlow(knownUser != null && withContext(Dispatchers.IO) { syncedBefore(knownUser, query) })
         launch { combine(revision, auth.session, attempted) { _, session, ready -> session to ready }.collect { (session, ready) ->
             val snapshot = if (session == null) QuerySnapshot(emptyList()) else cached(query)
             if (session == null || ready || snapshot.documents.isNotEmpty()) send(snapshot)
