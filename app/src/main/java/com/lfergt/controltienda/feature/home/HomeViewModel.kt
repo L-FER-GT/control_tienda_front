@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -53,7 +54,8 @@ class HomeViewModel @Inject constructor(
         if (session == null) flowOf(null) else stores.observeStoreList(session.uid)
     }
 
-    private val chrome = combine(users.observeMe(), notifications.observeUnreadCount(), auth.session) { me, unread, session ->
+    /** Perfil y notificaciones solo decoran la cabecera: no deben retrasar la lista de tiendas. */
+    private val chrome = combine(users.observeMe().onStart { emit(null) }, notifications.observeUnreadCount().onStart { emit(0) }, auth.session) { me, unread, session ->
         Triple(me, unread, session?.isSuperadmin == true)
     }
 
