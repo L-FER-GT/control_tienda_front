@@ -11,3 +11,14 @@ Las cargas de archivos llevan el UID de origen. Primero se sincronizan documento
 La primera autenticación, aceptar invitaciones, eliminar cuenta y opciones maestras requieren conexión. Los reportes offline solo contienen datos previamente descargados; no implican que esté disponible todo el historial. Sin conexión no se detectan revocaciones nuevas de permisos.
 
 Entre dispositivos se consulta cada 15 segundos mientras la pantalla observa datos. Si no cambió el resultado se recibe solo el etag. No se garantiza actualización instantánea, ni notificaciones push con la app cerrada.
+
+## Carga instantánea desde la base local
+
+Las pantallas muestran primero lo que ya está en el teléfono y actualizan desde la nube en segundo plano:
+
+- Cada consulta lee de SQLite solo sus documentos (por la clave `uid + ruta`), no toda la caché del usuario. Una tienda con muchas ventas ya no hace lenta la lista de productos.
+- Cuando llega un cambio, solo vuelven a leer la base las consultas a las que les afecta esa ruta.
+- Si varias pantallas observan la misma consulta (por ejemplo la tienda en la cabecera y en la lista), comparten una sola lectura y un solo sondeo. Al volver a una pantalla en menos de un minuto se ve al instante el último dato.
+- Hasta tres consultas se actualizan desde la nube a la vez, así la pantalla visible no espera en fila detrás de las demás.
+- El etag de cada consulta se guarda en la base (`poll_state`). Al reabrir la app, si nada cambió, el servidor responde solo el etag y no se vuelve a descargar el catálogo.
+- Una consulta que nunca se sincronizó y no tiene datos locales espera la nube como máximo 3 segundos; después se muestra lo que haya y se completa al llegar.

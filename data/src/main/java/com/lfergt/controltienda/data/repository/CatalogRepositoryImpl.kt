@@ -47,14 +47,17 @@ class CatalogRepositoryImpl @Inject constructor(
     private val productFlows = ConcurrentHashMap<String, Flow<List<Product>>>()
     private val categoryFlows = ConcurrentHashMap<String, Flow<List<Category>>>()
 
-    override fun observeCategories(storeId: String): Flow<List<Category>> = categoryFlows.getOrPut(storeId) {
+    /** Por usuario: tras cambiar de cuenta no se repite el último catálogo de la anterior. */
+    private fun flowKey(storeId: String) = "${runCatching { currentUser.uid() }.getOrNull()}:$storeId"
+
+    override fun observeCategories(storeId: String): Flow<List<Category>> = categoryFlows.getOrPut(flowKey(storeId)) {
         database.collection("stores/$storeId/categories").observe()
             .map { snap -> snap.documents.map { it.toCategory() }.sortedBy { it.name.lowercase() } }
             .catch { emit(emptyList()) }
             .shareIn(scope, SharingStarted.WhileSubscribed(5_000), replay = 1)
     }
 
-    override fun observeProducts(storeId: String): Flow<List<Product>> = productFlows.getOrPut(storeId) {
+    override fun observeProducts(storeId: String): Flow<List<Product>> = productFlows.getOrPut(flowKey(storeId)) {
         database.collection("stores/$storeId/products").observe()
             .map { snap -> snap.documents.map { it.toProduct() }.sortedBy { it.name.lowercase() } }
             .catch { emit(emptyList()) }
