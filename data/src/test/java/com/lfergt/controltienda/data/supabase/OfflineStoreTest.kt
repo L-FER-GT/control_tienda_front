@@ -133,4 +133,47 @@ class OfflineStoreTest {
         assertTrue(request.body.readUtf8().contains("\"etag\":\"v1\""));assertEquals("Bearer access",request.getHeader("Authorization"))
         scope.cancel();server.shutdown()
     }
+
+    @Test fun `after a restart the stored etag avoids downloading unchanged rows again`() = runBlocking {
+        val context=RuntimeEnvironment.getApplication() as Context
+        context.getSharedPreferences("supabase_session",Context.MODE_PRIVATE).edit().putString("uid","restart-user")
+            .putString("access","access").putString("refresh","refresh").putLong("expires",Long.MAX_VALUE).commit()
+        val server=MockWebServer();server.start()
+        val scope=CoroutineScope(SupervisorJob()+StandardTestDispatcher())
+        val sync=object:SyncMonitor { override val failures:Flow<String> = emptyFlow();override fun report(error:Throwable)=Unit }
+        val config=DataConfig(server.url("/").toString(),"public",appVersion="test")
+        try {
+            val first=DocumentStore(context,SupabaseAuth(context,config),sync,scope)
+            server.enqueue(MockResponse().setBody("""{"etag":"v1","rows":[{"path":"stores/shop/products/p1","data":{"name":"Arroz"}}]}"""))
+            first.refresh(first.collection("stores/shop/products"))
+            server.takeRequest()
+            // Nueva instancia = la app se volvió a abrir: la caché en memoria está vacía.
+            val second=DocumentStore(context,SupabaseAuth(context,config),sync,scope)
+            server.enqueue(MockResponse().setBody("""{"etag":"v1","rows":null}"""))
+            second.refresh(second.collection("stores/shop/products"))
+            assertTrue(server.takeRequest().body.readUtf8().contains("\"etag\":\"v1\""))
+            assertEquals(listOf("Arroz"),second.cached(second.collection("stores/shop/products")).documents.map { it.getString("name") })
+        } finally { scope.cancel();server.shutdown() }
+    }
+
+    @Test fun `cached reads only the documents of the requested collection`() = runBlocking {
+        val context=RuntimeEnvironment.getApplication() as Context
+        context.getSharedPreferences("supabase_session",Context.MODE_PRIVATE).edit().putString("uid","scope-user")
+            .putString("access","access").putString("refresh","refresh").putLong("expires",Long.MAX_VALUE).commit()
+        val db=LocalDatabase(context)
+        listOf("stores/shop/products/a","stores/shop/products/a/priceHistory/h1","stores/shop/productsOld/x",
+            "stores/shop/categories/c1","stores/other/members/scope-user","stores/shop/members/scope-user").forEach { path ->
+            db.writableDatabase.insertOrThrow("documents",null,ContentValues().apply { put("uid","scope-user");put("path",path);put("data","""{"uid":"scope-user"}""") })
+        }
+        db.close()
+        val scope=CoroutineScope(SupervisorJob()+StandardTestDispatcher())
+        val sync=object:SyncMonitor { override val failures:Flow<String> = emptyFlow();override fun report(error:Throwable)=Unit }
+        try {
+            val store=DocumentStore(context,SupabaseAuth(context,DataConfig("http://localhost/","public",appVersion="test")),sync,scope)
+            assertEquals(listOf("a"),store.cached(store.collection("stores/shop/products")).documents.map { it.id })
+            assertEquals(listOf("stores/other/members/scope-user","stores/shop/members/scope-user"),
+                store.cached(store.collectionGroup("members")).documents.map { it.reference.path })
+            assertEquals(listOf("h1"),store.cached(store.collection("stores/shop/products/a/priceHistory")).documents.map { it.id })
+        } finally { scope.cancel() }
+    }
 }
